@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Finance Briefing</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0e0e0e; --paper: #f5f0e8; --accent: #c8963e; --accent2: #2a4a6b;
+    --muted: #7a7060; --rule: #d4cfc4; --success: #2d6a4f; --error: #8b1a1a;
+    --dropbox: #0061fe;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper); color: var(--ink); font-family: 'DM Sans', sans-serif; min-height: 100vh;
+    background-image: radial-gradient(ellipse at 20% 50%, rgba(200,150,62,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(42,74,107,0.06) 0%, transparent 60%);
+  }
+  .masthead {
+    border-bottom: 3px double var(--ink); padding: 2rem 3rem 1.5rem;
+    display: flex; align-items: flex-end; justify-content: space-between;
+  }
+  .masthead-left .edition {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem;
+    letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem;
+  }
+  .masthead-left h1 {
+    font-family: 'Playfair Display', serif; font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 900; line-height: 0.95; letter-spacing: -0.02em;
+  }
+  .masthead-left h1 span { color: var(--accent); }
+  .masthead-right { text-align: right; }
+  .masthead-right .dateline { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; }
+  .masthead-right .tagline { font-family: 'Playfair Display', serif; font-style: italic; font-size: 1rem; color: var(--accent2); margin-top: 0.25rem; }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 3rem; }
+  .section-rule { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .section-rule span {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--muted); white-space: nowrap;
+  }
+  .section-rule::before, .section-rule::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .config-panel {
+    background: white; border: 1px solid var(--rule); border-radius: 2px;
+    padding: 2rem; margin-bottom: 2rem; box-shadow: 2px 2px 0 var(--rule);
+  }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .field { display: flex; flex-direction: column; gap: 0.4rem; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+  input, select, textarea {
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem; padding: 0.6rem 0.8rem;
+    border: 1px solid var(--rule); border-radius: 2px; background: var(--paper);
+    color: var(--ink); outline: none; transition: border-color 0.2s; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+  input[type="password"] { font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
+  textarea { resize: vertical; min-height: 70px; }
+  .key-row { display: flex; gap: 0.5rem; align-items: center; }
+  .key-row input { flex: 1; }
+  .toggle-vis {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted);
+    background: none; border: 1px solid var(--rule); border-radius: 2px;
+    padding: 0.6rem 0.7rem; cursor: pointer; white-space: nowrap;
+  }
+  .dropbox-status {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem;
+    border-radius: 2px; margin-bottom: 1.25rem; font-family: 'DM Mono', monospace;
+    font-size: 0.68rem; letter-spacing: 0.08em;
+  }
+  .dropbox-status.connected { background: #eaf2ff; border: 1px solid #aac8f8; color: var(--dropbox); }
+  .dropbox-status.disconnected { background: #fff8f0; border: 1px solid #f0d8b0; color: #8a5a10; }
+  .dropbox-status.error { background: #fdf0f0; border: 1px solid #e8c8c8; color: var(--error); }
+  .dropbox-status.loading { background: var(--paper); border: 1px solid var(--rule); color: var(--muted); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .connected .status-dot { background: var(--dropbox); }
+  .disconnected .status-dot { background: #c8963e; }
+  .error .status-dot { background: var(--error); }
+  .loading .status-dot { background: var(--muted); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .memory-badge {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 0.35rem 0.75rem; border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.25rem;
+  }
+  .memory-badge.loaded { background: #e8f5ee; color: var(--success); border: 1px solid #b0d8be; }
+  .memory-badge.empty { background: #f5f0e8; color: var(--muted); border: 1px solid var(--rule); }
+  .generate-btn {
+    width: 100%; margin-top: 1.5rem; padding: 1rem 2rem; background: var(--ink);
+    color: var(--paper); border: none; border-radius: 2px; font-family: 'Playfair Display', serif;
+    font-size: 1.1rem; font-style: italic; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 0.75rem; letter-spacing: 0.02em;
+  }
+  .generate-btn:hover:not(:disabled) { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(42,74,107,0.3); }
+  .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-icon { font-size: 1.2rem; }
+  .progress-panel {
+    background: white; border: 1px solid var(--rule); border-radius: 2px;
+    padding: 1.5rem 2rem; margin-bottom: 2rem; display: none; box-shadow: 2px 2px 0 var(--rule);
+  }
+  .progress-panel.visible { display: block; }
+  .progress-steps { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+  .step { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: var(--muted); transition: all 0.3s; }
+  .step.active { color: var(--ink); }
+  .step.done { color: var(--success); }
+  .step.error-step { color: var(--error); }
+  .step-icon { font-family: 'DM Mono', monospace; font-size: 0.8rem; width: 1.5rem; text-align: center; flex-shrink: 0; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--rule); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .output-panel { background: white; border: 1px solid var(--rule); border-radius: 2px; margin-bottom: 2rem; box-shadow: 2px 2px 0 var(--rule); display: none; }
+  .output-panel.visible { display: block; }
+  .output-tabs { display: flex; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+  .tab {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 0.85rem 1.5rem; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--muted); transition: all 0.2s;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab-content { padding: 1.5rem 2rem; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .script-text { font-family: 'DM Sans', sans-serif; font-size: 0.95rem; line-height: 1.8; color: var(--ink); white-space: pre-wrap; }
+  .audio-section { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 1rem 0; }
+  .vinyl {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: conic-gradient(#1a1a1a 0deg,#2a2a2a 10deg,#1a1a1a 20deg,#2a2a2a 30deg,#1a1a1a 40deg,#2a2a2a 50deg,#1a1a1a 60deg,#2a2a2a 70deg,#1a1a1a 80deg,#2a2a2a 90deg,#1a1a1a 100deg,#2a2a2a 110deg,#1a1a1a 120deg,#2a2a2a 130deg,#1a1a1a 140deg,#2a2a2a 150deg,#1a1a1a 160deg,#2a2a2a 170deg,#1a1a1a 180deg,#2a2a2a 190deg,#1a1a1a 200deg,#2a2a2a 210deg,#1a1a1a 220deg,#2a2a2a 230deg,#1a1a1a 240deg,#2a2a2a 250deg,#1a1a1a 260deg,#2a2a2a 270deg,#1a1a1a 280deg,#2a2a2a 290deg,#1a1a1a 300deg,#2a2a2a 310deg,#1a1a1a 320deg,#2a2a2a 330deg,#1a1a1a 340deg,#2a2a2a 350deg,#1a1a1a 360deg);
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .vinyl.spinning { animation: rotate 4s linear infinite; }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+  .vinyl-label { width: 42px; height: 42px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 0.45rem; color: white; text-align: center; line-height: 1.2; font-weight: 700; padding: 4px; }
+  audio { width: 100%; max-width: 400px; }
+  .download-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .dl-btn { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.6rem 1.2rem; border-radius: 2px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; transition: all 0.2s; border: 1px solid transparent; }
+  .dl-btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .dl-btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+  .dl-btn.secondary { background: transparent; color: var(--ink); border-color: var(--rule); }
+  .dl-btn.secondary:hover { border-color: var(--ink); }
+  .error-msg { background: #fdf0f0; border: 1px solid #e8c8c8; border-radius: 2px; padding: 1rem 1.25rem; font-size: 0.85rem; color: var(--error); margin-top: 1rem; display: none; font-family: 'DM Mono', monospace; line-height: 1.6; }
+  .error-msg.visible { display: block; }
+  .archive-panel { background: white; border: 1px solid var(--rule); border-radius: 2px; margin-bottom: 2rem; box-shadow: 2px 2px 0 var(--rule); overflow: hidden; }
+  .archive-empty { padding: 3rem 2rem; text-align: center; font-family: 'Playfair Display', serif; font-style: italic; color: var(--muted); font-size: 1rem; }
+  .episode-list { display: flex; flex-direction: column; }
+  .episode-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; border-bottom: 1px solid var(--rule); gap: 1rem; transition: background 0.15s; }
+  .episode-row:last-of-type { border-bottom: none; }
+  .episode-row:hover { background: var(--paper); }
+  .ep-meta { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 0; }
+  .ep-date { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; }
+  .ep-topics { font-size: 0.88rem; color: var(--ink); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+  .ep-btn { font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.35rem 0.7rem; border-radius: 2px; cursor: pointer; border: 1px solid var(--rule); background: white; color: var(--muted); transition: all 0.15s; }
+  .ep-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .ep-btn.del:hover { border-color: var(--error); color: var(--error); background: #fdf0f0; }
+  .episode-detail { display: none; padding: 1.25rem 1.5rem; border-top: 1px dashed var(--rule); background: #fdfcfa; }
+  .episode-detail.open { display: block; }
+  .episode-detail .script-text { font-size: 0.88rem; max-height: 300px; overflow-y: auto; }
+  .trend-panel { background: white; border: 1px solid var(--rule); border-radius: 2px; padding: 2rem; margin-bottom: 2rem; box-shadow: 2px 2px 0 var(--rule); }
+  .trend-output { font-size: 0.92rem; line-height: 1.8; color: var(--ink); white-space: pre-wrap; margin-top: 1.25rem; max-height: 500px; overflow-y: auto; }
+  .trend-output.loading { color: var(--muted); font-style: italic; font-family: 'Playfair Display', serif; }
+  .cors-banner { background: #fffbf0; border: 1px solid #e8c84a; border-left: 4px solid #c8963e; border-radius: 2px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: none; }
+  .cors-banner.visible { display: block; }
+  .cors-banner strong { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.5rem; }
+  .cors-banner p { font-size: 0.88rem; line-height: 1.7; color: #5a4a20; }
+  .cors-banner code { background: #f0e8d0; padding: 0.15rem 0.4rem; border-radius: 2px; font-family: 'DM Mono', monospace; font-size: 0.82rem; }
+  .info-tip { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.5; }
+  .info-tip code { background: #ece8e0; padding: 0.1rem 0.35rem; border-radius: 2px; font-family: 'DM Mono', monospace; font-size: 0.78rem; }
+  .setup-box { background: #f0f6ff; border: 1px solid #c0d8f8; border-radius: 2px; padding: 1.25rem 1.5rem; font-size: 0.88rem; line-height: 1.75; color: #1a2a4a; }
+  .setup-box h4 { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dropbox); margin-bottom: 0.75rem; }
+  .setup-box ol { padding-left: 1.25rem; }
+  .setup-box li { margin-bottom: 0.4rem; }
+  .setup-box code { background: #dce8fa; padding: 0.15rem 0.4rem; border-radius: 2px; font-family: 'DM Mono', monospace; font-size: 0.82rem; }
+  .setup-box a { color: var(--dropbox); }
+  .setup-box p { font-size: 0.82rem; color: var(--muted); margin-top: 0.75rem; }
+  .connect-row { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+  footer { border-top: 1px solid var(--rule); padding: 1.5rem 3rem; text-align: center; font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  @media (max-width: 600px) {
+    .masthead { padding: 1.25rem 1.25rem 1rem; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .masthead-right { text-align: left; }
+    .container { padding: 1.25rem; }
+    .config-grid { grid-template-columns: 1fr; }
+    .field.full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-left">
+    <div class="edition">Daily Intelligence Briefing</div>
+    <h1>AI Finance<br><span>Podcast</span></h1>
+  </div>
+  <div class="masthead-right">
+    <div class="dateline" id="dateline"></div>
+    <div class="tagline">Tomorrow's news, today.</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="cors-banner" id="corsBanner">
+    <strong>⚠️ Cannot run from file://</strong>
+    <p>This app must be served over HTTP/HTTPS to make API calls. Host it on GitHub Pages for access on any device, or locally with <code>python3 -m http.server 8080</code>.</p>
+  </div>
+
+  <div class="section-rule"><span>Configuration</span></div>
+  <div class="config-panel">
+
+    <div class="dropbox-status loading" id="dbxStatus">
+      <div class="status-dot"></div>
+      <span id="dbxStatusText">Checking Dropbox connection…</span>
+    </div>
+
+    <div id="memoryBadge" class="memory-badge empty">⬤ Loading episode history…</div>
+
+    <div class="config-grid">
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <div class="key-row">
+          <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
+          <button class="toggle-vis" onclick="toggleVis('anthropicKey',this)">Show</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>OpenAI API Key</label>
+        <div class="key-row">
+          <input type="password" id="openaiKey" placeholder="sk-..." />
+          <button class="toggle-vis" onclick="toggleVis('openaiKey',this)">Show</button>
+        </div>
+      </div>
+      <div class="field full">
+        <label>Dropbox Access Token
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
+            — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
+          </span>
+        </label>
+        <div class="key-row">
+          <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
+            onkeydown="if(event.key==='Enter') connectDropbox()" />
+          <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
+          <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
+        </div>
+        <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
+      </div>
+
+      <div class="field full" id="dbxSetupBox" style="display:none;">
+        <div class="setup-box">
+          <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
+          <ol>
+            <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
+            <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
+            <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
+            <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
+            <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
+          </ol>
+          <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Podcast Duration</label>
+        <select id="duration">
+          <option value="3">~3 minutes (brief)</option>
+          <option value="5" selected>~5 minutes (standard)</option>
+          <option value="8">~8 minutes (in-depth)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>TTS Voice</label>
+        <select id="voice">
+          <option value="alloy">Alloy (neutral)</option>
+          <option value="echo">Echo (male, measured)</option>
+          <option value="fable" selected>Fable (British, warm)</option>
+          <option value="onyx">Onyx (male, deep)</option>
+          <option value="nova">Nova (female, warm)</option>
+          <option value="shimmer">Shimmer (female, expressive)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>Focus Areas (edit or overwrite as needed)</label>
+        <textarea id="focusAreas">CRM, Client and Customer Relationship Management, Low Code, Agentic AI and Agents, AWS, Bedrock, Kiro, Google Antigravity, Claude, Gemini, ChatGPT, OpenAI, xAI, Retail Banking, Business Banking, Commercial Mid Market, Private Banking and Wealth Management, Capital Markets, Personal Productivity, Microsoft Power Platform, M365, Copilot, Dynamics365</textarea>
+      </div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn" onclick="generate()">
+      <span class="btn-icon">📻</span> Generate Today's Briefing
+    </button>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <div class="progress-panel" id="progressPanel">
+    <div class="section-rule"><span>Generating</span></div>
+    <div class="progress-steps">
+      <div class="step" id="step1"><span class="step-icon">○</span><span id="step1txt">Researching latest AI &amp; financial services developments...</span></div>
+      <div class="step" id="step2"><span class="step-icon">○</span><span id="step2txt">Writing podcast script with Claude...</span></div>
+      <div class="step" id="step3"><span class="step-icon">○</span><span id="step3txt">Converting script to audio with OpenAI TTS...</span></div>
+      <div class="step" id="step4"><span class="step-icon">○</span><span id="step4txt">Saving to Dropbox archive...</span></div>
+    </div>
+  </div>
+
+  <div class="output-panel" id="outputPanel">
+    <div class="output-tabs">
+      <div class="tab active" onclick="switchTab('audio')">🎧 Audio</div>
+      <div class="tab" onclick="switchTab('script')">📄 Script</div>
+      <div class="tab" onclick="switchTab('sources')">🔗 Sources</div>
+      <div class="tab" onclick="switchTab('save')">💾 Save</div>
+    </div>
+    <div class="tab-content">
+      <div class="tab-pane active" id="tab-audio">
+        <div class="audio-section">
+          <div class="vinyl" id="vinyl"><div class="vinyl-label">AI<br>FINANCE<br>BRIEF</div></div>
+          <audio id="audioPlayer" controls
+            onplay="document.getElementById('vinyl').classList.add('spinning')"
+            onpause="document.getElementById('vinyl').classList.remove('spinning')"
+            onended="document.getElementById('vinyl').classList.remove('spinning')"></audio>
+          <div class="download-row">
+            <a class="dl-btn primary" id="downloadMp3" download="ai-finance-briefing.mp3">⬇ Download MP3</a>
+            <button class="dl-btn secondary" onclick="switchTab('script')">📄 View Script</button>
+          </div>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-script">
+        <div class="script-text" id="scriptText"></div>
+      </div>
+      <div class="tab-pane" id="tab-sources">
+        <div id="sourcesContent">
+          <p style="color:var(--muted);font-size:0.88rem;font-style:italic;">Sources will appear here after generation.</p>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-save">
+        <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">
+          Your script &amp; sources are saved automatically to Dropbox after each generation. Download the MP3 below — drag it to your local Dropbox folder and it will sync to all your devices.
+        </p>
+        <div class="download-row" style="justify-content:flex-start;flex-wrap:wrap;">
+          <a class="dl-btn primary" id="downloadMp3b" download="ai-finance-briefing.mp3">⬇ Download MP3</a>
+          <button class="dl-btn secondary" onclick="downloadScript()">⬇ Script (.txt)</button>
+          <button class="dl-btn secondary" onclick="exportArchive()">⬇ Full Archive (.json)</button>
+        </div>
+        <div style="margin-top:1.25rem;padding:0.9rem 1.1rem;background:#f0f6ff;border:1px solid #c0d8f8;border-radius:2px;font-size:0.82rem;color:#1a2a4a;line-height:1.7;">
+          <strong style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--dropbox);">📁 Dropbox Locations</strong><br>
+          Scripts &amp; metadata (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/memory.json</code><br>
+          MP3 audio (manual): download above, then drag into <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-rule"><span>Episode Archive</span></div>
+  <div style="display:flex;justify-content:flex-end;gap:0.6rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;">
+    <button class="ep-btn" onclick="refreshArchive()" style="font-size:0.65rem;padding:0.4rem 0.9rem;">↻ Refresh from Dropbox</button>
+    <button class="ep-btn" onclick="clearToday()" style="font-size:0.65rem;padding:0.4rem 0.9rem;">🗓 Clear today's episodes</button>
+    <button class="ep-btn del" onclick="clearAll()" style="font-size:0.65rem;padding:0.4rem 0.9rem;">🗑 Clear all memory</button>
+  </div>
+  <div class="archive-panel" id="archivePanel">
+    <div class="archive-empty" id="archiveEmpty">No episodes yet — generate your first briefing above.</div>
+    <div class="episode-list" id="episodeList"></div>
+  </div>
+
+  <div class="section-rule"><span>Trend Analysis</span></div>
+  <div class="trend-panel">
+    <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1rem;">
+      Ask Claude to analyse themes, spot patterns, or compare developments across your episode archive. Requires at least 2 saved episodes and your Anthropic API key.
+    </p>
+    <div style="display:flex;gap:0.75rem;">
+      <input type="text" id="trendQuery" placeholder="e.g. What regulatory themes have recurred? How has AI adoption in banking evolved?" style="flex:1;" />
+      <button class="dl-btn primary" onclick="runTrendAnalysis()" id="trendBtn" style="white-space:nowrap;border-radius:2px;">Analyse →</button>
+    </div>
+    <div class="trend-output" id="trendOutput"></div>
+  </div>
+
+</div>
+
+<footer>AI Finance Briefing — Powered by Claude &amp; OpenAI TTS — Archive stored in Dropbox — For personal use only</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// STORAGE ARCHITECTURE
+// ─────────────────────────────────────────────────────────────────
+// All episode data → Dropbox: /AI Finance Briefing/memory.json
+//   Format: { episodes: [{ date, topics, script, sources, savedAt }] }
+//   Effectively unlimited storage. 180-day version history in Dropbox.
+//   Cross-device: any browser that has the token can read/write.
+//
+// Dropbox token → localStorage (tiny string, not episode data)
+//   Survives browser restarts. If cleared, just re-enter the token.
+//   Losing the token NEVER loses episode data — data is safe in Dropbox.
+// ═══════════════════════════════════════════════════════════════════
+
+const DBX_UPLOAD_URL   = 'https://content.dropboxapi.com/2/files/upload';
+const DBX_DOWNLOAD_URL = 'https://content.dropboxapi.com/2/files/download';
+const DBX_USER_URL     = 'https://api.dropboxapi.com/2/users/get_current_account';
+// NOTE: Path is relative to the app's folder (Dropbox/Apps/AI_Podcast_Briefing/)
+// because this app was created with "App Folder" access, not "Full Dropbox"
+const MEMORY_PATH      = '/memory.json';
+
+let dbxToken = '';
+let episodeHistory = [];
+let currentScript = '';
+let currentAudioBlob = null;
+
+// ── Token: only this small value lives in localStorage ──
+function loadSavedToken() {
+  dbxToken = localStorage.getItem('dbx_token') || '';
+  if (dbxToken) document.getElementById('dropboxToken').value = dbxToken;
+}
+function persistToken(token) {
+  dbxToken = token;
+  localStorage.setItem('dbx_token', token);
+}
+function forgetDropboxToken() {
+  if (!confirm('Remove saved Dropbox token from this browser?\n\nYour episode archive in Dropbox is completely unaffected — you can reconnect any time.')) return;
+  localStorage.removeItem('dbx_token');
+  dbxToken = '';
+  document.getElementById('dropboxToken').value = '';
+  setDbxStatus('disconnected', 'Token removed — enter token above and click Save & Connect');
+}
+function toggleSetup() {
+  const el = document.getElementById('dbxSetupBox');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// ── Dropbox API calls ──
+async function dbxDownloadMemory() {
+  const r = await fetch(DBX_DOWNLOAD_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${dbxToken}`,
+      'Dropbox-API-Arg': JSON.stringify({ path: MEMORY_PATH })
+    }
+  });
+  if (r.status === 409) return null; // file doesn't exist yet — first run
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Dropbox read error (${r.status}): ${t.slice(0,200)}`);
+  }
+  return JSON.parse(await r.text());
+}
+
+async function dbxUploadMemory(data) {
+  const body = JSON.stringify(data);
+  const r = await fetch(DBX_UPLOAD_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${dbxToken}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({
+        path: MEMORY_PATH,
+        mode: 'overwrite',
+        autorename: false,
+        mute: true
+      })
+    },
+    body
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Dropbox write error (${r.status}): ${t.slice(0,200)}`);
+  }
+  return await r.json();
+}
+
+// ── Connect & verify ──
+async function connectDropbox() {
+  const token = document.getElementById('dropboxToken').value.trim();
+  if (!token) { alert('Please paste your Dropbox access token first.'); return; }
+  setDbxStatus('loading', 'Verifying token with Dropbox…');
+  try {
+    const r = await fetch(DBX_USER_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: 'null'
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error_summary || `HTTP ${r.status}`);
+    }
+    const user = await r.json();
+    persistToken(token);
+    const name = user.name?.display_name || user.email || 'your account';
+    setDbxStatus('connected', `Connected as ${name}`);
+    document.getElementById('dbxSetupBox').style.display = 'none';
+    await loadArchive();
+  } catch(e) {
+    setDbxStatus('error', `Connection failed: ${e.message}`);
+  }
+}
+
+function setDbxStatus(state, msg) {
+  const el = document.getElementById('dbxStatus');
+  el.className = 'dropbox-status ' + state;
+  document.getElementById('dbxStatusText').textContent = msg;
+}
+
+// ── Load archive from Dropbox ──
+async function loadArchive() {
+  if (!dbxToken) {
+    setDbxStatus('disconnected', 'Not connected — enter your Dropbox token above');
+    document.getElementById('memoryBadge').className = 'memory-badge empty';
+    document.getElementById('memoryBadge').innerHTML = '⬤ Connect Dropbox to load episode history';
+    episodeHistory = [];
+    renderArchive();
+    return;
+  }
+  setDbxStatus('loading', 'Loading archive from Dropbox…');
+  try {
+    const data = await dbxDownloadMemory();
+    episodeHistory = (data && Array.isArray(data.episodes)) ? data.episodes : [];
+    episodeHistory.sort((a, b) => b.date.localeCompare(a.date));
+    updateStatusAfterLoad();
+  } catch(e) {
+    setDbxStatus('error', `Failed to load: ${e.message}`);
+    episodeHistory = [];
+  }
+  updateMemoryBadge();
+  renderArchive();
+}
+
+async function refreshArchive() { await loadArchive(); }
+
+function updateStatusAfterLoad() {
+  const n = episodeHistory.length;
+  setDbxStatus('connected', `Connected · ${n} episode${n !== 1 ? 's' : ''} in archive`);
+}
+
+// ── Save episode to Dropbox ──
+async function saveEpisode(date, topics, script, sources = []) {
+  // Read current state first — safe for multi-device use
+  let data = { episodes: [] };
+  try {
+    const existing = await dbxDownloadMemory();
+    if (existing && Array.isArray(existing.episodes)) data = existing;
+  } catch { /* first episode ever */ }
+
+  const newEp = { date, topics, script, sources, savedAt: new Date().toISOString() };
+  data.episodes = data.episodes.filter(ep => ep.date !== date); // remove any same-day duplicate
+  data.episodes.unshift(newEp); // newest first
+  await dbxUploadMemory(data);
+
+  episodeHistory = data.episodes.sort((a, b) => b.date.localeCompare(a.date));
+  updateMemoryBadge();
+  updateStatusAfterLoad();
+  renderArchive();
+}
+
+// ── Delete a single episode from Dropbox ──
+async function deleteEpisodeByDate(date) {
+  setDbxStatus('loading', 'Updating Dropbox archive…');
+  try {
+    const data = await dbxDownloadMemory() || { episodes: [] };
+    data.episodes = data.episodes.filter(ep => ep.date !== date);
+    await dbxUploadMemory(data);
+    episodeHistory = data.episodes.sort((a, b) => b.date.localeCompare(a.date));
+    updateMemoryBadge();
+    updateStatusAfterLoad();
+    renderArchive();
+  } catch(e) {
+    setDbxStatus('error', `Delete failed: ${e.message}`);
+  }
+}
+
+// ── Clear controls ──
+async function clearAll() {
+  const n = episodeHistory.length;
+  if (n === 0) { alert('No episodes to clear.'); return; }
+  // Require typing DELETE — not just a confirm() click
+  const input = prompt(
+    `⚠️ PERMANENT DELETION\n\nThis will delete ALL ${n} episode${n > 1 ? 's' : ''} from your Dropbox archive.\n\n` +
+    `Note: Dropbox version history can recover files for up to 180 days.\n\n` +
+    `Type DELETE (all caps) to confirm:`
+  );
+  if (input !== 'DELETE') {
+    if (input !== null) alert('Cancelled — you must type DELETE exactly. Nothing was deleted.');
+    return;
+  }
+  setDbxStatus('loading', 'Clearing archive…');
+  try {
+    await dbxUploadMemory({ episodes: [] });
+    episodeHistory = [];
+    setDbxStatus('connected', 'Connected · Archive cleared');
+    updateMemoryBadge();
+    renderArchive();
+  } catch(e) {
+    setDbxStatus('error', `Clear failed: ${e.message}`);
+  }
+}
+
+async function clearToday() {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayEps = episodeHistory.filter(ep => ep.date === today);
+  if (todayEps.length === 0) { alert(`No episodes from today (${today}) found.`); return; }
+  if (!confirm(`Delete ${todayEps.length} episode(s) from today (${today})?\n\nDropbox version history can recover them within 180 days.`)) return;
+  setDbxStatus('loading', 'Removing today\'s episodes…');
+  try {
+    const data = await dbxDownloadMemory() || { episodes: [] };
+    data.episodes = data.episodes.filter(ep => ep.date !== today);
+    await dbxUploadMemory(data);
+    episodeHistory = data.episodes.sort((a, b) => b.date.localeCompare(a.date));
+    updateMemoryBadge();
+    updateStatusAfterLoad();
+    renderArchive();
+  } catch(e) {
+    setDbxStatus('error', `Clear failed: ${e.message}`);
+  }
+}
+
+// ── History context for deduplication ──
+function buildHistoryContext() {
+  if (episodeHistory.length === 0) return '';
+  const lines = episodeHistory.slice(0, 10).map(ep => `- ${ep.date}: ${ep.topics}`).join('\n');
+  return `\n\nIMPORTANT — Topics already covered in recent episodes. Do NOT repeat these stories; find genuinely new developments:\n${lines}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ARCHIVE UI
+// ═══════════════════════════════════════════════════════════════
+function updateMemoryBadge() {
+  const badge = document.getElementById('memoryBadge');
+  const n = episodeHistory.length;
+  if (n === 0) { badge.className = 'memory-badge empty'; badge.innerHTML = '⬤ No episodes yet'; }
+  else { badge.className = 'memory-badge loaded'; badge.innerHTML = `✓ ${n} episode${n>1?'s':''} in Dropbox — duplicate topics will be avoided`; }
+}
+
+function renderArchive() {
+  const list = document.getElementById('episodeList');
+  const empty = document.getElementById('archiveEmpty');
+  list.innerHTML = '';
+  if (!episodeHistory.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  episodeHistory.forEach((ep, i) => {
+    const row = document.createElement('div');
+    row.className = 'episode-row';
+    row.innerHTML = `
+      <div class="ep-meta">
+        <div class="ep-date">${formatDate(ep.date)}</div>
+        <div class="ep-topics">${escHtml(ep.topics || 'Topics not recorded')}</div>
+      </div>
+      <div class="ep-actions">
+        <button class="ep-btn" onclick="toggleDetail(${i},event)">Read</button>
+        <button class="ep-btn" onclick="dlEpisode(${i},event)">↓ txt</button>
+        <button class="ep-btn del" onclick="delEpisodeBtn('${ep.date}',event)">✕</button>
+      </div>`;
+    const detail = document.createElement('div');
+    detail.className = 'episode-detail';
+    detail.id = `epd-${i}`;
+    const srcHtml = ep.sources && ep.sources.length
+      ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--rule);">
+           <div style="font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem;">Sources (${ep.sources.length})</div>
+           ${ep.sources.map(s=>`<div style="margin-bottom:0.35rem;">${s.title?`<div style="font-size:0.78rem;font-weight:500;">${escHtml(s.title)}</div>`:''}<a href="${escHtml(s.url)}" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--accent2);word-break:break-all;">${escHtml(s.url)}</a></div>`).join('')}
+           <button class="ep-btn" style="margin-top:0.5rem;" onclick="copyEpisodeSources(${i})">⎘ Copy All URLs</button>
+         </div>` : '';
+    detail.innerHTML = `<div class="script-text">${escHtml(ep.script)}</div>${srcHtml}`;
+    list.appendChild(row);
+    list.appendChild(detail);
+  });
+}
+
+function toggleDetail(i, e) { e.stopPropagation(); document.getElementById(`epd-${i}`).classList.toggle('open'); }
+function dlEpisode(i, e) {
+  e.stopPropagation();
+  const ep = episodeHistory[i];
+  Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([ep.script], {type:'text/plain'})),
+    download: `ai-finance-briefing-${ep.date}.txt`
+  }).click();
+}
+async function delEpisodeBtn(date, e) {
+  e.stopPropagation();
+  const ep = episodeHistory.find(ep => ep.date === date);
+  if (!confirm(`Delete episode from ${formatDate(date)}?\n\nDropbox version history will keep it recoverable for up to 180 days.`)) return;
+  await deleteEpisodeByDate(date);
+}
+function exportArchive() {
+  Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([JSON.stringify({ episodes: episodeHistory }, null, 2)], {type:'application/json'})),
+    download: `ai-finance-briefing-archive-${new Date().toISOString().slice(0,10)}.json`
+  }).click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GENERATION PIPELINE
+// ═══════════════════════════════════════════════════════════════
+async function generate() {
+  const anthropicKey = document.getElementById('anthropicKey').value.trim();
+  const openaiKey = document.getElementById('openaiKey').value.trim();
+  const duration = document.getElementById('duration').value;
+  const voice = document.getElementById('voice').value;
+  const focus = document.getElementById('focusAreas').value.trim();
+
+  clearError();
+  if (!anthropicKey || !openaiKey) { showError('Please enter both API keys.'); return; }
+  if (!dbxToken) { showError('Please connect Dropbox first — click "Setup instructions" above to get started.'); return; }
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  document.getElementById('progressPanel').classList.add('visible');
+  document.getElementById('outputPanel').classList.remove('visible');
+
+  const wordCount = {3:450,5:750,8:1200}[duration];
+  const focusNote = focus ? `\n\nThe user is particularly interested in: ${focus}` : '';
+  const historyNote = buildHistoryContext();
+
+  try {
+    // ── Step 1: Research ──
+    setStep(1,'active'); setStep(2,'pending'); setStep(3,'pending'); setStep(4,'pending');
+
+    const r1 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content:
+          `You are a financial technology journalist. Search for the most important developments from the last 7 days relating to:
+1. Artificial intelligence in financial services (banking, insurance, investment management, fintech)
+2. Major AI research breakthroughs that could impact finance
+3. Regulatory developments around AI in finance
+4. Notable AI product launches or partnerships in financial services
+${focusNote}${historyNote}
+
+Return a concise bullet-point summary of the 5 most newsworthy items only. Keep total response under 500 words. Include source name for each item.`
+        }]
+      })
+    });
+    if (!r1.ok) { const e = await r1.json(); throw new Error(`Research error: ${e.error?.message||r1.statusText}`); }
+    const d1 = await r1.json();
+    const researchText = d1.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').slice(0,6000);
+
+    // Extract sources
+    const sourcesMap = new Map();
+    for (const block of d1.content) {
+      if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+        for (const result of block.content) {
+          if (result.type === 'web_search_result' && result.url)
+            sourcesMap.set(result.url, result.title || result.url);
+        }
+      }
+      if (block.type === 'text' && Array.isArray(block.citations)) {
+        for (const cite of block.citations) {
+          if (cite.url) sourcesMap.set(cite.url, cite.title || cite.url);
+        }
+      }
+    }
+    const sources = Array.from(sourcesMap.entries()).map(([url, title]) => ({ url, title }));
+    setStep(1,'done');
+
+    // ── Step 2: Script (with rate-limit pause) ──
+    setStep(2,'active','Waiting briefly to avoid rate limits...');
+    await new Promise(r => setTimeout(r, 10000));
+    setStep(2,'active','Writing podcast script with Claude...');
+
+    const r2 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        messages: [{ role: 'user', content:
+          `You are a skilled podcast script writer. Using the following research briefing, write a polished, engaging podcast script of approximately ${wordCount} words.
+
+RESEARCH BRIEFING:
+${researchText}
+
+SCRIPT REQUIREMENTS:
+- Begin with a warm, professional intro ("Good morning, and welcome to your AI Finance Briefing. I'm your host...")
+- Write in a clear, conversational spoken style — as if being read aloud
+- Cover the top stories naturally, with smooth transitions between topics
+- Include brief analysis or implications for finance professionals where relevant
+- End with a forward-looking sign-off
+- Do NOT include stage directions, sound effects, or formatting — just the words to be spoken
+- Aim for approximately ${wordCount} words
+- Write only the script text — no headers, no labels, no preamble`
+        }]
+      })
+    });
+    if (!r2.ok) { const e = await r2.json(); throw new Error(`Script error: ${e.error?.message||r2.statusText}`); }
+    const d2 = await r2.json();
+    currentScript = d2.content[0].text;
+    document.getElementById('scriptText').textContent = currentScript;
+    setStep(2,'done');
+
+    // ── Step 3: TTS ──
+    setStep(3,'active');
+    const chunks = chunkText(currentScript, 4000);
+    const audioBuffers = [];
+    for (const chunk of chunks) {
+      const tr = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
+        body: JSON.stringify({ model: 'tts-1', input: chunk, voice, response_format: 'mp3' })
+      });
+      if (!tr.ok) { const e = await tr.json().catch(()=>({})); throw new Error(`TTS error: ${e.error?.message||tr.statusText}`); }
+      audioBuffers.push(await tr.arrayBuffer());
+    }
+    const total = audioBuffers.reduce((s,b)=>s+b.byteLength,0);
+    const merged = new Uint8Array(total);
+    let off = 0; for (const b of audioBuffers) { merged.set(new Uint8Array(b), off); off += b.byteLength; }
+    currentAudioBlob = new Blob([merged], { type: 'audio/mpeg' });
+    const audioUrl = URL.createObjectURL(currentAudioBlob);
+    document.getElementById('audioPlayer').src = audioUrl;
+    const dateStr = new Date().toISOString().slice(0,10);
+    const fname = `ai-finance-briefing-${dateStr}.mp3`;
+    ['downloadMp3','downloadMp3b'].forEach(id => {
+      document.getElementById(id).href = audioUrl;
+      document.getElementById(id).download = fname;
+    });
+    setStep(3,'done');
+
+    // ── Step 4: Save to Dropbox ──
+    setStep(4,'active','Saving to Dropbox…');
+    const topicSummary = researchText.replace(/^[\s\-\*•]+/gm,'').split('\n')
+      .filter(l=>l.trim().length>20).slice(0,3).map(l=>l.trim().slice(0,80)).join(' · ');
+    await saveEpisode(dateStr, topicSummary, currentScript, sources);
+    setStep(4,'done','Saved to Dropbox ✓');
+
+    renderSources(sources, dateStr);
+    document.getElementById('outputPanel').classList.add('visible');
+    document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch(err) {
+    console.error(err);
+    let msg = 'Error: ' + err.message;
+    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))
+      msg = 'Network error — if running locally: python3 -m http.server 8080, then open http://localhost:8080/ai-finance-podcast.html';
+    else if (err.message.includes('401') || err.message.includes('invalid_api_key'))
+      msg = 'API key rejected (401). Check for extra spaces.';
+    else if (err.message.includes('429') || err.message.includes('rate limit'))
+      msg = 'Rate limit hit. Wait 60 seconds and try again.';
+    showError(msg);
+    [1,2,3,4].forEach(n => { if (document.getElementById('step'+n).classList.contains('active')) setStep(n,'error-step'); });
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Trend analysis ──
+async function runTrendAnalysis() {
+  const anthropicKey = document.getElementById('anthropicKey').value.trim();
+  const query = document.getElementById('trendQuery').value.trim();
+  const output = document.getElementById('trendOutput');
+  if (!anthropicKey) { alert('Please enter your Anthropic API key first.'); return; }
+  if (episodeHistory.length < 2) { alert('Need at least 2 episodes for trend analysis.'); return; }
+  if (!query) { alert('Please enter an analysis question.'); return; }
+  document.getElementById('trendBtn').disabled = true;
+  output.className = 'trend-output loading';
+  output.textContent = 'Analysing your episode archive…';
+  const corpus = episodeHistory.slice(0,15).map(ep=>`=== ${formatDate(ep.date)} ===\n${ep.script.slice(0,1500)}`).join('\n\n');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 1500,
+        messages: [{ role: 'user', content:
+          `You are an expert analyst of AI and financial services trends. The user has a personal podcast archive with ${episodeHistory.length} episodes.\n\nEPISODE SCRIPTS:\n${corpus}\n\nUSER QUESTION: ${query}\n\nProvide a thoughtful, structured analysis. Reference specific episodes and dates where relevant.`
+        }]
+      })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || r.statusText); }
+    const d = await r.json();
+    output.className = 'trend-output';
+    output.textContent = d.content[0].text;
+  } catch(err) {
+    output.className = 'trend-output';
+    output.textContent = 'Error: ' + err.message;
+  } finally { document.getElementById('trendBtn').disabled = false; }
+}
+
+// ── Sources rendering ──
+function renderSources(sources, dateStr) {
+  const el = document.getElementById('sourcesContent');
+  if (!sources || !sources.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:0.88rem;font-style:italic;">No source URLs found in this episode\'s research results.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <span style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);">${sources.length} source${sources.length!==1?'s':''} — ${dateStr}</span>
+      <button class="ep-btn" onclick="copyAllSources()">⎘ Copy All URLs</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+      ${sources.map((s,i)=>`
+        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;background:var(--paper);border:1px solid var(--rule);border-radius:2px;">
+          <span style="font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);flex-shrink:0;">${String(i+1).padStart(2,'0')}</span>
+          <div style="flex:1;min-width:0;">
+            ${s.title?`<div style="font-size:0.82rem;font-weight:500;margin-bottom:0.2rem;">${escHtml(s.title)}</div>`:''}
+            <a href="${escHtml(s.url)}" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--accent2);word-break:break-all;text-decoration:none;">${escHtml(s.url)}</a>
+          </div>
+          <button class="ep-btn" onclick="copySingle('${escHtml(s.url)}')" style="font-size:0.6rem;flex-shrink:0;">Copy</button>
+        </div>`).join('')}
+    </div>
+    <textarea id="sourcesTextarea" style="position:absolute;left:-9999px;" readonly>${escHtml(sources.map(s=>s.url).join('\n'))}</textarea>`;
+}
+function copyAllSources() {
+  const ta = document.getElementById('sourcesTextarea');
+  if (!ta) return;
+  ta.select(); document.execCommand('copy');
+  const btn = event.target; btn.textContent = '✓ Copied!';
+  setTimeout(() => btn.textContent = '⎘ Copy All URLs', 2000);
+}
+function copySingle(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = event.target; btn.textContent = '✓';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  }).catch(() => { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); });
+}
+function copyEpisodeSources(i) {
+  const ep = episodeHistory[i];
+  if (!ep?.sources?.length) return;
+  const text = ep.sources.map(s=>s.url).join('\n');
+  navigator.clipboard.writeText(text).catch(() => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); });
+  event.target.textContent = '✓ Copied!';
+  setTimeout(() => event.target.textContent = '⎘ Copy All URLs', 2000);
+}
+
+// ── Utilities ──
+function chunkText(text, maxLen) {
+  if (text.length <= maxLen) return [text];
+  const chunks = [], sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  let cur = '';
+  for (const s of sentences) { if ((cur+s).length > maxLen) { if (cur) chunks.push(cur.trim()); cur = s; } else cur += s; }
+  if (cur) chunks.push(cur.trim());
+  return chunks;
+}
+function downloadScript() {
+  if (!currentScript) return;
+  Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([currentScript], {type:'text/plain'})),
+    download: `ai-finance-briefing-${new Date().toISOString().slice(0,10)}.txt`
+  }).click();
+}
+function toggleVis(id, btn) {
+  const el = document.getElementById(id);
+  if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
+  else { el.type = 'password'; btn.textContent = 'Show'; }
+}
+function switchTab(name) {
+  const names = ['audio','script','sources','save'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id==='tab-'+name));
+}
+function setStep(n, state, msg) {
+  const el = document.getElementById('step'+n);
+  el.className = 'step ' + state;
+  const icon = el.querySelector('.step-icon');
+  if (state==='active') icon.innerHTML = '<div class="spinner"></div>';
+  else if (state==='done') icon.textContent = '✓';
+  else if (state==='error-step') icon.textContent = '✗';
+  else icon.textContent = '○';
+  if (msg) document.getElementById('step'+n+'txt').textContent = msg;
+}
+function showError(msg) { const e = document.getElementById('errorMsg'); e.textContent = msg; e.classList.add('visible'); }
+function clearError() { document.getElementById('errorMsg').classList.remove('visible'); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function formatDate(iso) {
+  try { return new Date(iso).toLocaleDateString('en-GB', {weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+  catch { return iso; }
+}
+
+// ── Init ──
+document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-GB', {
+  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+});
+if (window.location.protocol === 'file:') {
+  document.getElementById('corsBanner').classList.add('visible');
+  document.getElementById('generateBtn').disabled = true;
+}
+loadSavedToken();
+loadArchive();
+</script>
+</body>
+</html>
