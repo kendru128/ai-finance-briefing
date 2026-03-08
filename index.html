@@ -56,6 +56,7 @@
   input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
   input[type="password"] { font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
   textarea { resize: vertical; min-height: 70px; }
+  #focusAreas { min-height: 210px; }
   .key-row { display: flex; gap: 0.5rem; align-items: center; }
   .key-row input { flex: 1; }
   .toggle-vis {
@@ -258,32 +259,15 @@
           </div>
         </div>
         <div class="field full">
-          <label>Dropbox Access Token
-            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
-              — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
-            </span>
-          </label>
-          <div class="key-row">
-            <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
-              onkeydown="if(event.key==='Enter') connectDropbox()" />
-            <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
-            <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
+          <label>Dropbox Connection</label>
+          <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-top:0.25rem;">
+            <button onclick="startDropboxOAuth()" style="background:var(--dropbox);color:white;border:none;border-radius:2px;padding:0.6rem 1.2rem;font-family:'DM Mono',monospace;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;gap:0.5rem;">
+              <svg width="16" height="16" viewBox="0 0 40 40" fill="white"><path d="M20 8.2L10 14.5l10 6.3 10-6.3zm-10 14l10 6.3 10-6.3-10-6.2zm10 6.3l-10 6.2 10 6.3 10-6.3zm0-12.6L10 22.2l10 6.3 10-6.3z"/></svg>
+              Connect Dropbox
+            </button>
+            <button onclick="forgetDropboxToken()" style="background:none;color:var(--muted);border:1px solid var(--rule);border-radius:2px;padding:0.6rem 0.9rem;font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;">Disconnect</button>
           </div>
-          <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
-        </div>
-
-        <div class="field full" id="dbxSetupBox" style="display:none;">
-          <div class="setup-box">
-            <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
-            <ol>
-              <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
-              <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
-              <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
-              <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
-              <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
-            </ol>
-            <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
-          </div>
+          <div class="info-tip" style="margin-top:0.5rem;">Clicking <strong>Connect Dropbox</strong> opens a Dropbox login page — approve once and you're connected permanently on this device. Your episode archive is stored in <code>Dropbox/Apps/[app-name]/</code>.</div>
         </div>
       </div>
     </div>
@@ -425,7 +409,6 @@
 
 const DBX_UPLOAD_URL   = 'https://content.dropboxapi.com/2/files/upload';
 const DBX_DOWNLOAD_URL = 'https://content.dropboxapi.com/2/files/download';
-const DBX_USER_URL     = 'https://api.dropboxapi.com/2/users/get_current_account';
 // NOTE: Path is relative to the app's folder (Dropbox/Apps/AI_Podcast_Briefing/)
 // because this app was created with "App Folder" access, not "Full Dropbox"
 const MEMORY_PATH      = '/memory.json';
@@ -435,37 +418,144 @@ let episodeHistory = [];
 let currentScript = '';
 let currentAudioBlob = null;
 
-// ── Token: only this small value lives in localStorage ──
+// ═══════════════════════════════════════════════════════════════════
+// DROPBOX OAUTH 2.0 PKCE — permanent refresh token, no expiry
+// ═══════════════════════════════════════════════════════════════════
+const DBX_CLIENT_ID   = 'c8qhhuxt5z26zbn';
+const DBX_REDIRECT    = 'https://kendru128.github.io/ai-finance-briefing/';
+const DBX_AUTH_URL    = 'https://www.dropbox.com/oauth2/authorize';
+const DBX_TOKEN_URL   = 'https://api.dropboxapi.com/oauth2/token';
+
+// PKCE helpers
+function base64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function generatePKCE() {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return { verifier, challenge: base64url(digest) };
+}
+
+async function startDropboxOAuth() {
+  const { verifier, challenge } = await generatePKCE();
+  localStorage.setItem('dbx_pkce_verifier', verifier);
+  const params = new URLSearchParams({
+    client_id: DBX_CLIENT_ID,
+    redirect_uri: DBX_REDIRECT,
+    response_type: 'code',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    token_access_type: 'offline',   // ← this gives a refresh token that never expires
+    scope: 'files.content.read files.content.write account_info.read'
+  });
+  window.location.href = DBX_AUTH_URL + '?' + params;
+}
+
+async function handleOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (!code) return false;
+
+  // Clean the URL immediately so it doesn't confuse on reload
+  window.history.replaceState({}, '', DBX_REDIRECT);
+
+  const verifier = localStorage.getItem('dbx_pkce_verifier');
+  if (!verifier) { setDbxStatus('error', 'OAuth error: missing PKCE verifier. Please try connecting again.'); return true; }
+
+  setDbxStatus('loading', 'Completing Dropbox authorisation…');
+  try {
+    const r = await fetch(DBX_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        grant_type: 'authorization_code',
+        client_id: DBX_CLIENT_ID,
+        redirect_uri: DBX_REDIRECT,
+        code_verifier: verifier
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error_description || data.error || r.statusText);
+
+    // Store both access token and refresh token
+    localStorage.setItem('dbx_token', data.access_token);
+    localStorage.setItem('dbx_refresh_token', data.refresh_token);
+    localStorage.removeItem('dbx_pkce_verifier');
+    dbxToken = data.access_token;
+
+    const name = data.account_id ? 'Dropbox' : 'Dropbox';
+    setDbxStatus('connected', 'Connected to Dropbox ✓ — token will auto-refresh');
+    // Close configure panel after successful auth
+    const sec = document.getElementById('configureSection');
+    const btn = document.getElementById('configureBtn');
+    if (sec?.classList.contains('open')) { sec.classList.remove('open'); btn.classList.remove('open'); btn.textContent = '⚙ Configure'; }
+    await loadArchive();
+  } catch(e) {
+    setDbxStatus('error', `Authorisation failed: ${e.message}`);
+  }
+  return true;
+}
+
+async function refreshDropboxToken() {
+  const refreshToken = localStorage.getItem('dbx_refresh_token');
+  if (!refreshToken) throw new Error('No refresh token — please reconnect Dropbox.');
+  const r = await fetch(DBX_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: DBX_CLIENT_ID
+    })
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error_description || data.error || r.statusText);
+  dbxToken = data.access_token;
+  localStorage.setItem('dbx_token', dbxToken);
+  return dbxToken;
+}
+
+// Wrap fetch calls so expired access tokens are refreshed automatically
+async function dbxFetch(url, options, retry = true) {
+  const r = await fetch(url, options);
+  if (r.status === 401 && retry) {
+    // Access token expired — refresh and retry once
+    await refreshDropboxToken();
+    // Update auth header with new token
+    const newOpts = { ...options, headers: { ...options.headers, 'Authorization': `Bearer ${dbxToken}` } };
+    return fetch(url, newOpts);
+  }
+  return r;
+}
+
 function loadSavedToken() {
   dbxToken = localStorage.getItem('dbx_token') || '';
-  if (dbxToken) document.getElementById('dropboxToken').value = dbxToken;
 }
-function persistToken(token) {
-  dbxToken = token;
-  localStorage.setItem('dbx_token', token);
-}
+
 function forgetDropboxToken() {
-  if (!confirm('Remove saved Dropbox token from this browser?\n\nYour episode archive in Dropbox is completely unaffected — you can reconnect any time.')) return;
+  if (!confirm('Disconnect Dropbox on this device?\n\nYour episode archive in Dropbox is completely unaffected — reconnect any time by clicking "Connect Dropbox".')) return;
   localStorage.removeItem('dbx_token');
+  localStorage.removeItem('dbx_refresh_token');
+  localStorage.removeItem('dbx_pkce_verifier');
   dbxToken = '';
-  document.getElementById('dropboxToken').value = '';
-  setDbxStatus('disconnected', 'Token removed — enter token above and click Save & Connect');
-}
-function toggleSetup() {
-  const el = document.getElementById('dbxSetupBox');
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  setDbxStatus('disconnected', 'Disconnected — click Connect Dropbox in the Configure panel to reconnect');
+  episodeHistory = [];
+  updateMemoryBadge();
+  renderArchive();
 }
 
 // ── Dropbox API calls ──
 async function dbxDownloadMemory() {
-  const r = await fetch(DBX_DOWNLOAD_URL, {
+  const r = await dbxFetch(DBX_DOWNLOAD_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${dbxToken}`,
       'Dropbox-API-Arg': JSON.stringify({ path: MEMORY_PATH })
     }
   });
-  if (r.status === 409) return null; // file doesn't exist yet — first run
+  if (r.status === 409) return null;
   if (!r.ok) {
     const t = await r.text();
     throw new Error(`Dropbox read error (${r.status}): ${t.slice(0,200)}`);
@@ -475,7 +565,7 @@ async function dbxDownloadMemory() {
 
 async function dbxUploadMemory(data) {
   const body = JSON.stringify(data);
-  const r = await fetch(DBX_UPLOAD_URL, {
+  const r = await dbxFetch(DBX_UPLOAD_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${dbxToken}`,
@@ -497,30 +587,6 @@ async function dbxUploadMemory(data) {
 }
 
 // ── Connect & verify ──
-async function connectDropbox() {
-  const token = document.getElementById('dropboxToken').value.trim();
-  if (!token) { alert('Please paste your Dropbox access token first.'); return; }
-  setDbxStatus('loading', 'Verifying token with Dropbox…');
-  try {
-    const r = await fetch(DBX_USER_URL, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: 'null'
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      throw new Error(e.error_summary || `HTTP ${r.status}`);
-    }
-    const user = await r.json();
-    persistToken(token);
-    const name = user.name?.display_name || user.email || 'your account';
-    setDbxStatus('connected', `Connected as ${name}`);
-    document.getElementById('dbxSetupBox').style.display = 'none';
-    await loadArchive();
-  } catch(e) {
-    setDbxStatus('error', `Connection failed: ${e.message}`);
-  }
-}
 
 function setDbxStatus(state, msg) {
   const el = document.getElementById('dbxStatus');
@@ -531,7 +597,7 @@ function setDbxStatus(state, msg) {
 // ── Load archive from Dropbox ──
 async function loadArchive() {
   if (!dbxToken) {
-    setDbxStatus('disconnected', 'Not connected — enter your Dropbox token above');
+    setDbxStatus('disconnected', 'Not connected — click ⚙ Configure → Connect Dropbox');
     document.getElementById('memoryBadge').className = 'memory-badge empty';
     document.getElementById('memoryBadge').innerHTML = '⬤ Connect Dropbox to load episode history';
     episodeHistory = [];
@@ -1020,7 +1086,7 @@ async function uploadToDropbox() {
   try {
     // Check if files exist
     const checkFile = async (path) => {
-      const r = await fetch('https://api.dropboxapi.com/2/files/get_metadata', {
+      const r = await dbxFetch('https://api.dropboxapi.com/2/files/get_metadata', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${dbxToken}`,
@@ -1047,7 +1113,7 @@ async function uploadToDropbox() {
 
     // Upload both files
     const uploadFile = async (path, body, contentType) => {
-      const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
+      const r = await dbxFetch('https://content.dropboxapi.com/2/files/upload', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${dbxToken}`,
@@ -1110,6 +1176,7 @@ function formatDate(iso) {
 }
 
 // ── Init ──
+(async () => {
 document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-GB', {
   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
 });
@@ -1118,11 +1185,16 @@ if (window.location.protocol === 'file:') {
   document.getElementById('generateBtn').disabled = true;
 }
 loadSavedToken();
-// Auto-open configure panel if no keys are stored yet
-if (!localStorage.getItem('dbx_token') && !localStorage.getItem('anthropic_key') && !localStorage.getItem('openai_key')) {
-  toggleConfigure();
+// Handle OAuth callback (page loads with ?code= after Dropbox redirect)
+const wasCallback = await handleOAuthCallback();
+if (!wasCallback) {
+  // Normal load — auto-open configure if not connected
+  if (!dbxToken) {
+    toggleConfigure();
+  }
+  await loadArchive();
 }
-loadArchive();
+})();
 </script>
 </body>
 </html>
