@@ -172,6 +172,29 @@
   .setup-box a { color: var(--dropbox); }
   .setup-box p { font-size: 0.82rem; color: var(--muted); margin-top: 0.75rem; }
   .connect-row { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+  .configure-btn {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 0.45rem 1rem; border-radius: 2px; cursor: pointer;
+    border: 1px solid var(--rule); background: white; color: var(--muted);
+    transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  .configure-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .configure-btn.open { border-color: var(--accent2); color: var(--accent2); background: #f0f6ff; }
+  .configure-section {
+    border: 1px solid var(--rule); border-radius: 2px; background: white;
+    padding: 1.5rem 2rem; margin-bottom: 1.25rem;
+    border-top: 3px solid var(--accent2);
+    display: none;
+  }
+  .configure-section.open { display: block; }
+  .dbx-upload-btn {
+    font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 0.6rem 1.2rem; border-radius: 2px; cursor: pointer;
+    border: 1px solid var(--dropbox); background: white; color: var(--dropbox);
+    transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  .dbx-upload-btn:hover:not(:disabled) { background: var(--dropbox); color: white; }
+  .dbx-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   footer { border-top: 1px solid var(--rule); padding: 1.5rem 3rem; text-align: center; font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
   @media (max-width: 600px) {
     .masthead { padding: 1.25rem 1.25rem 1rem; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
@@ -212,50 +235,61 @@
 
     <div id="memoryBadge" class="memory-badge empty">⬤ Loading episode history…</div>
 
+    <!-- Configure toggle button -->
+    <div style="margin-bottom:1.25rem;">
+      <button class="configure-btn" id="configureBtn" onclick="toggleConfigure()">⚙ Configure</button>
+    </div>
+
+    <!-- Collapsible configure section -->
+    <div class="configure-section" id="configureSection">
+      <div class="config-grid">
+        <div class="field">
+          <label>Anthropic API Key</label>
+          <div class="key-row">
+            <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
+            <button class="toggle-vis" onclick="toggleVis('anthropicKey',this)">Show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>OpenAI API Key</label>
+          <div class="key-row">
+            <input type="password" id="openaiKey" placeholder="sk-..." />
+            <button class="toggle-vis" onclick="toggleVis('openaiKey',this)">Show</button>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Dropbox Access Token
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
+              — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
+            </span>
+          </label>
+          <div class="key-row">
+            <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
+              onkeydown="if(event.key==='Enter') connectDropbox()" />
+            <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
+            <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
+          </div>
+          <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
+        </div>
+
+        <div class="field full" id="dbxSetupBox" style="display:none;">
+          <div class="setup-box">
+            <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
+            <ol>
+              <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
+              <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
+              <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
+              <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
+              <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
+            </ol>
+            <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Always-visible settings -->
     <div class="config-grid">
-      <div class="field">
-        <label>Anthropic API Key</label>
-        <div class="key-row">
-          <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
-          <button class="toggle-vis" onclick="toggleVis('anthropicKey',this)">Show</button>
-        </div>
-      </div>
-      <div class="field">
-        <label>OpenAI API Key</label>
-        <div class="key-row">
-          <input type="password" id="openaiKey" placeholder="sk-..." />
-          <button class="toggle-vis" onclick="toggleVis('openaiKey',this)">Show</button>
-        </div>
-      </div>
-      <div class="field full">
-        <label>Dropbox Access Token
-          <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
-            — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
-          </span>
-        </label>
-        <div class="key-row">
-          <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
-            onkeydown="if(event.key==='Enter') connectDropbox()" />
-          <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
-          <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
-        </div>
-        <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
-      </div>
-
-      <div class="field full" id="dbxSetupBox" style="display:none;">
-        <div class="setup-box">
-          <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
-          <ol>
-            <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
-            <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
-            <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
-            <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
-            <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
-          </ol>
-          <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
-        </div>
-      </div>
-
       <div class="field">
         <label>Podcast Duration</label>
         <select id="duration">
@@ -315,6 +349,7 @@
           <div class="download-row">
             <a class="dl-btn primary" id="downloadMp3" download="ai-finance-briefing.mp3">⬇ Download MP3</a>
             <button class="dl-btn secondary" onclick="switchTab('script')">📄 View Script</button>
+            <button class="dbx-upload-btn" id="dbxUploadBtnAudio" onclick="uploadToDropbox()">☁ Save to Dropbox</button>
           </div>
         </div>
       </div>
@@ -328,17 +363,20 @@
       </div>
       <div class="tab-pane" id="tab-save">
         <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">
-          Your script &amp; sources are saved automatically to Dropbox after each generation. Download the MP3 below — drag it to your local Dropbox folder and it will sync to all your devices.
+          Your script &amp; sources are saved automatically to Dropbox after each generation. Use the buttons below to download files locally or save the MP3 and script directly to your Dropbox folders.
         </p>
         <div class="download-row" style="justify-content:flex-start;flex-wrap:wrap;">
           <a class="dl-btn primary" id="downloadMp3b" download="ai-finance-briefing.mp3">⬇ Download MP3</a>
           <button class="dl-btn secondary" onclick="downloadScript()">⬇ Script (.txt)</button>
           <button class="dl-btn secondary" onclick="exportArchive()">⬇ Full Archive (.json)</button>
+          <button class="dbx-upload-btn" id="dbxUploadBtnSave" onclick="uploadToDropbox()">☁ Save to Dropbox</button>
         </div>
+        <div id="dbxUploadStatus" style="display:none;margin-top:1rem;padding:0.75rem 1rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.72rem;line-height:1.7;"></div>
         <div style="margin-top:1.25rem;padding:0.9rem 1.1rem;background:#f0f6ff;border:1px solid #c0d8f8;border-radius:2px;font-size:0.82rem;color:#1a2a4a;line-height:1.7;">
           <strong style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--dropbox);">📁 Dropbox Locations</strong><br>
-          Scripts &amp; metadata (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/memory.json</code><br>
-          MP3 audio (manual): download above, then drag into <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/</code>
+          Scripts &amp; metadata (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Apps/[app-name]/memory.json</code><br>
+          MP3 audio (via button): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Apps/[app-name]/audio/</code><br>
+          Script text (via button): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Apps/[app-name]/scripts/</code>
         </div>
       </div>
     </div>
@@ -941,6 +979,108 @@ function downloadScript() {
     download: `ai-finance-briefing-${new Date().toISOString().slice(0,10)}.txt`
   }).click();
 }
+function toggleConfigure() {
+  const sec = document.getElementById('configureSection');
+  const btn = document.getElementById('configureBtn');
+  const isOpen = sec.classList.contains('open');
+  sec.classList.toggle('open', !isOpen);
+  btn.classList.toggle('open', !isOpen);
+  btn.textContent = isOpen ? '⚙ Configure' : '✕ Close Configure';
+}
+
+// ── Upload MP3 + Script to Dropbox subfolders ──
+async function uploadToDropbox() {
+  if (!dbxToken) { alert('Please connect Dropbox first via the Configure panel.'); return; }
+  if (!currentAudioBlob) { alert('No audio to upload — generate a briefing first.'); return; }
+  if (!currentScript) { alert('No script to upload — generate a briefing first.'); return; }
+
+  const dateStr = new Date().toISOString().slice(0,10);
+  const mp3Name = `ai-finance-briefing-${dateStr}.mp3`;
+  const txtName = `ai-finance-briefing-${dateStr}.txt`;
+  const mp3Path = `/audio/${mp3Name}`;
+  const txtPath = `/scripts/${txtName}`;
+
+  // Check for existing files
+  const setStatus = (msg, color) => {
+    const el = document.getElementById('dbxUploadStatus');
+    el.style.display = 'block';
+    el.style.background = color === 'error' ? '#fdf0f0' : color === 'ok' ? '#eaf5ee' : '#f5f0e8';
+    el.style.border = `1px solid ${color === 'error' ? '#e8c8c8' : color === 'ok' ? '#b0d8be' : '#d4cfc4'}`;
+    el.style.color = color === 'error' ? 'var(--error)' : color === 'ok' ? 'var(--success)' : 'var(--muted)';
+    el.innerHTML = msg;
+  };
+
+  setStatus('<div class="spinner" style="display:inline-block;margin-right:0.5rem;"></div> Checking Dropbox for existing files…', 'info');
+
+  // Disable buttons during upload
+  ['dbxUploadBtnAudio','dbxUploadBtnSave'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.disabled = true;
+  });
+
+  try {
+    // Check if files exist
+    const checkFile = async (path) => {
+      const r = await fetch('https://api.dropboxapi.com/2/files/get_metadata', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${dbxToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path })
+      });
+      if (r.status === 409) return false; // not found
+      return r.ok;
+    };
+
+    const mp3Exists = await checkFile(mp3Path);
+    const txtExists = await checkFile(txtPath);
+
+    if (mp3Exists || txtExists) {
+      const existing = [mp3Exists && `audio/${mp3Name}`, txtExists && `scripts/${txtName}`].filter(Boolean).join(' and ');
+      const proceed = confirm(`⚠️ File already exists in Dropbox:\n\n${existing}\n\nOverwrite?`);
+      if (!proceed) {
+        setStatus('Upload cancelled — existing files were not overwritten.', 'info');
+        ['dbxUploadBtnAudio','dbxUploadBtnSave'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+        return;
+      }
+    }
+
+    // Upload both files
+    const uploadFile = async (path, body, contentType) => {
+      const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${dbxToken}`,
+          'Content-Type': 'application/octet-stream',
+          'Dropbox-API-Arg': JSON.stringify({ path, mode: 'overwrite', autorename: false, mute: true })
+        },
+        body
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`Upload failed for ${path}: ${t.slice(0,200)}`);
+      }
+      return r.json();
+    };
+
+    setStatus('<div class="spinner" style="display:inline-block;margin-right:0.5rem;"></div> Uploading MP3 to Dropbox/audio/…', 'info');
+    await uploadFile(mp3Path, currentAudioBlob, 'audio/mpeg');
+
+    setStatus('<div class="spinner" style="display:inline-block;margin-right:0.5rem;"></div> Uploading script to Dropbox/scripts/…', 'info');
+    await uploadFile(txtPath, new Blob([currentScript], {type:'text/plain'}), 'text/plain');
+
+    setStatus(`✓ Saved to Dropbox successfully!<br>
+      <span style="opacity:0.8;">audio/${mp3Name}</span><br>
+      <span style="opacity:0.8;">scripts/${txtName}</span>`, 'ok');
+
+  } catch(e) {
+    setStatus(`✗ Upload failed: ${e.message}`, 'error');
+  } finally {
+    ['dbxUploadBtnAudio','dbxUploadBtnSave'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+  }
+}
+
+
 function toggleVis(id, btn) {
   const el = document.getElementById(id);
   if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
@@ -978,6 +1118,10 @@ if (window.location.protocol === 'file:') {
   document.getElementById('generateBtn').disabled = true;
 }
 loadSavedToken();
+// Auto-open configure panel if no keys are stored yet
+if (!localStorage.getItem('dbx_token') && !localStorage.getItem('anthropic_key') && !localStorage.getItem('openai_key')) {
+  toggleConfigure();
+}
 loadArchive();
 </script>
 </body>
