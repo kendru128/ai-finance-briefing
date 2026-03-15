@@ -212,72 +212,81 @@
 
     <div id="memoryBadge" class="memory-badge empty">⬤ Loading episode history…</div>
 
-    <div class="config-grid">
-      <div class="field">
-        <label>Anthropic API Key</label>
-        <div class="key-row">
-          <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
-          <button class="toggle-vis" onclick="toggleVis('anthropicKey',this)">Show</button>
-        </div>
-      </div>
-      <div class="field">
-        <label>OpenAI API Key</label>
-        <div class="key-row">
-          <input type="password" id="openaiKey" placeholder="sk-..." />
-          <button class="toggle-vis" onclick="toggleVis('openaiKey',this)">Show</button>
-        </div>
-      </div>
-      <div class="field full">
-        <label>Dropbox Access Token
-          <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
-            — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
-          </span>
-        </label>
-        <div class="key-row">
-          <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
-            onkeydown="if(event.key==='Enter') connectDropbox()" />
-          <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
-          <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
-        </div>
-        <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
-      </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+      <button class="toggle-vis" id="configToggleBtn" onclick="toggleConfig()" style="display:inline-flex;align-items:center;gap:0.4rem;">
+        <span id="configToggleIcon">▸</span> Settings
+      </button>
+      <span style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--muted);letter-spacing:0.08em;" id="configHint">API keys, voice, focus areas</span>
+    </div>
 
-      <div class="field full" id="dbxSetupBox" style="display:none;">
-        <div class="setup-box">
-          <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
-          <ol>
-            <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
-            <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
-            <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
-            <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
-            <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
-          </ol>
-          <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
+    <div id="configCollapsible" style="display:none;">
+      <div class="config-grid">
+        <div class="field">
+          <label>Anthropic API Key</label>
+          <div class="key-row">
+            <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
+            <button class="toggle-vis" onclick="toggleVis('anthropicKey',this)">Show</button>
+          </div>
         </div>
-      </div>
+        <div class="field">
+          <label>OpenAI API Key</label>
+          <div class="key-row">
+            <input type="password" id="openaiKey" placeholder="sk-..." />
+            <button class="toggle-vis" onclick="toggleVis('openaiKey',this)">Show</button>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Dropbox Access Token
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;">
+              — <a href="#" onclick="toggleSetup();return false;" style="color:var(--accent2);font-size:0.75rem;">Setup instructions</a>
+            </span>
+          </label>
+          <div class="key-row">
+            <input type="password" id="dropboxToken" placeholder="sl.xxxxxxxxxx… (paste token then click Connect)"
+              onkeydown="if(event.key==='Enter') connectDropbox()" />
+            <button class="toggle-vis" onclick="toggleVis('dropboxToken',this)">Show</button>
+            <button class="toggle-vis" onclick="connectDropbox()" style="background:var(--dropbox);color:white;border-color:var(--dropbox);white-space:nowrap;">Connect</button>
+          </div>
+          <div class="info-tip">Your episode archive lives in <code>Dropbox/Apps/[your-app-name]/memory.json</code> — safe across devices, immune to cache clears, 180-day version history.</div>
+        </div>
 
-      <div class="field">
-        <label>Podcast Duration</label>
-        <select id="duration">
-          <option value="3">~3 minutes (brief)</option>
-          <option value="5" selected>~5 minutes (standard)</option>
-          <option value="8">~8 minutes (in-depth)</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>TTS Voice</label>
-        <select id="voice">
-          <option value="alloy">Alloy (neutral)</option>
-          <option value="echo">Echo (male, measured)</option>
-          <option value="fable" selected>Fable (British, warm)</option>
-          <option value="onyx">Onyx (male, deep)</option>
-          <option value="nova">Nova (female, warm)</option>
-          <option value="shimmer">Shimmer (female, expressive)</option>
-        </select>
-      </div>
-      <div class="field full">
-        <label>Focus Areas (edit or overwrite as needed)</label>
-        <textarea id="focusAreas">CRM, Client and Customer Relationship Management, Low Code, Agentic AI and Agents, AWS, Bedrock, Kiro, Google Antigravity, Claude, Gemini, ChatGPT, OpenAI, xAI, Retail Banking, Business Banking, Commercial Mid Market, Private Banking and Wealth Management, Capital Markets, Personal Productivity, Microsoft Power Platform, M365, Copilot, Dynamics365, UK FCA, PRA, Bank of England, EU AI Act, Lloyds Banking Group, Barclays, HSBC, NatWest, Aviva, Legal and General, Schroders, London Stock Exchange Group</textarea>
+        <div class="field full" id="dbxSetupBox" style="display:none;">
+          <div class="setup-box">
+            <h4>🔧 One-time Dropbox Setup (~5 minutes)</h4>
+            <ol>
+              <li>Go to <a href="https://www.dropbox.com/developers/apps/create" target="_blank">dropbox.com/developers/apps/create</a></li>
+              <li>Choose <strong>Scoped access</strong> → <strong>App folder</strong> → give it any name (e.g. <code>AIFinanceBriefing</code>) → click <strong>Create app</strong></li>
+              <li>Go to the <strong>Permissions</strong> tab → tick <code>files.content.read</code> and <code>files.content.write</code> → click <strong>Submit</strong></li>
+              <li>Go back to <strong>Settings</strong> tab → scroll to <strong>Generated access token</strong> → click <strong>Generate</strong> → copy it</li>
+              <li>Paste the token into the field above and click the blue <strong>Connect</strong> button</li>
+            </ol>
+            <p>⚠️ Always set permissions <em>before</em> generating the token — tokens are stamped with the permissions that exist at creation time. To forget the token on this device: <a href="#" onclick="forgetDropboxToken();return false;">click here</a>.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Podcast Duration</label>
+          <select id="duration">
+            <option value="3">~3 minutes (brief)</option>
+            <option value="5" selected>~5 minutes (standard)</option>
+            <option value="8">~8 minutes (in-depth)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>TTS Voice</label>
+          <select id="voice">
+            <option value="alloy">Alloy (neutral)</option>
+            <option value="echo">Echo (male, measured)</option>
+            <option value="fable" selected>Fable (British, warm)</option>
+            <option value="onyx">Onyx (male, deep)</option>
+            <option value="nova">Nova (female, warm)</option>
+            <option value="shimmer">Shimmer (female, expressive)</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>Focus Areas (edit or overwrite as needed)</label>
+          <textarea id="focusAreas">CRM, Client and Customer Relationship Management, Low Code, Agentic AI and Agents, AWS, Bedrock, Kiro, Google Antigravity, Claude, Gemini, ChatGPT, OpenAI, xAI, Retail Banking, Business Banking, Commercial Mid Market, Private Banking and Wealth Management, Capital Markets, Personal Productivity, Microsoft Power Platform, M365, Copilot, Dynamics365, UK FCA, PRA, Bank of England, EU AI Act, Lloyds Banking Group, Barclays, HSBC, NatWest, Aviva, Legal and General, Schroders, London Stock Exchange Group</textarea>
+        </div>
       </div>
     </div>
 
@@ -337,7 +346,8 @@
         </div>
         <div style="margin-top:1.25rem;padding:0.9rem 1.1rem;background:#f0f6ff;border:1px solid #c0d8f8;border-radius:2px;font-size:0.82rem;color:#1a2a4a;line-height:1.7;">
           <strong style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--dropbox);">📁 Dropbox Locations</strong><br>
-          Scripts &amp; metadata (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/memory.json</code><br>
+          Scripts &amp; metadata: <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/memory.json</code><br>
+          Script text files (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/scripts/</code><br>
           MP3 audio (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/audio/</code>
         </div>
       </div>
@@ -458,7 +468,7 @@ async function dbxUploadMemory(data) {
   return await r.json();
 }
 
-async function dbxUploadAudio(blob, path) {
+async function dbxUploadFile(blob, path) {
   const r = await fetch(DBX_UPLOAD_URL, {
     method: 'POST',
     headers: {
@@ -475,7 +485,7 @@ async function dbxUploadAudio(blob, path) {
   });
   if (!r.ok) {
     const t = await r.text();
-    throw new Error(`Dropbox audio upload error (${r.status}): ${t.slice(0,200)}`);
+    throw new Error(`Dropbox file upload error (${r.status}): ${t.slice(0,200)}`);
   }
   return await r.json();
 }
@@ -788,8 +798,11 @@ async function generate() {
   const focus = document.getElementById('focusAreas').value.trim();
 
   clearError();
-  if (!anthropicKey || !openaiKey) { showError('Please enter both API keys.'); return; }
-  if (!dbxToken) { showError('Please connect Dropbox first — click "Setup instructions" above to get started.'); return; }
+  if (!anthropicKey || !openaiKey) { toggleConfig(true); showError('Please enter both API keys.'); return; }
+  if (!dbxToken) { toggleConfig(true); showError('Please connect Dropbox first — click "Setup instructions" above to get started.'); return; }
+  // Persist keys for next session
+  localStorage.setItem('anthropic_key', anthropicKey);
+  localStorage.setItem('openai_key', openaiKey);
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
@@ -963,18 +976,27 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
     setStep(3,'done');
 
     // ── Step 4: Save to Dropbox ──
-    setStep(4,'active','Saving script to Dropbox…');
+    setStep(4,'active','Saving metadata to Dropbox…');
     const topicSummary = researchText.replace(/^[\s\-\*•]+/gm,'').split('\n')
       .filter(l=>l.trim().length>20).slice(0,3).map(l=>l.trim().slice(0,80)).join(' · ');
     await saveEpisode(dateStr, topicSummary, currentScript, sources, extractedEntities, newPendingTopics);
 
+    // Upload script .txt to Dropbox /scripts/ folder
+    setStep(4,'active','Uploading script to Dropbox…');
+    const scriptBlob = new Blob([currentScript], { type: 'text/plain' });
+    const scriptFname = `ai-finance-briefing-${dateStr}.txt`;
+    try {
+      await dbxUploadFile(scriptBlob, `/scripts/${scriptFname}`);
+    } catch(scriptErr) {
+      console.warn('Script upload failed:', scriptErr);
+    }
+
     // Upload MP3 to Dropbox /audio/ folder
     setStep(4,'active','Uploading MP3 to Dropbox…');
     try {
-      await dbxUploadAudio(currentAudioBlob, `/audio/${fname}`);
+      await dbxUploadFile(currentAudioBlob, `/audio/${fname}`);
     } catch(audioErr) {
-      console.warn('MP3 upload failed (non-fatal):', audioErr);
-      // Don't block the pipeline — script is already saved
+      console.warn('MP3 upload failed:', audioErr);
     }
     setStep(4,'done','Saved to Dropbox ✓');
 
@@ -1102,6 +1124,16 @@ function toggleVis(id, btn) {
   if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
   else { el.type = 'password'; btn.textContent = 'Show'; }
 }
+function toggleConfig(forceOpen) {
+  const panel = document.getElementById('configCollapsible');
+  const icon = document.getElementById('configToggleIcon');
+  const hint = document.getElementById('configHint');
+  const isHidden = panel.style.display === 'none';
+  const shouldOpen = forceOpen === true || isHidden;
+  panel.style.display = shouldOpen ? 'block' : 'none';
+  icon.textContent = shouldOpen ? '▾' : '▸';
+  hint.style.display = shouldOpen ? 'none' : '';
+}
 function switchTab(name) {
   const names = ['audio','script','sources','save'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
@@ -1133,8 +1165,29 @@ if (window.location.protocol === 'file:') {
   document.getElementById('corsBanner').classList.add('visible');
   document.getElementById('generateBtn').disabled = true;
 }
+// Load saved API keys from localStorage
+const savedAnthropicKey = localStorage.getItem('anthropic_key') || '';
+const savedOpenaiKey = localStorage.getItem('openai_key') || '';
+if (savedAnthropicKey) document.getElementById('anthropicKey').value = savedAnthropicKey;
+if (savedOpenaiKey) document.getElementById('openaiKey').value = savedOpenaiKey;
+// Save keys on change
+document.getElementById('anthropicKey').addEventListener('change', function() {
+  localStorage.setItem('anthropic_key', this.value.trim());
+});
+document.getElementById('openaiKey').addEventListener('change', function() {
+  localStorage.setItem('openai_key', this.value.trim());
+});
 loadSavedToken();
 loadArchive();
+// Auto-expand config if any key is missing
+setTimeout(() => {
+  const hasAnthropic = document.getElementById('anthropicKey').value.trim();
+  const hasOpenai = document.getElementById('openaiKey').value.trim();
+  const hasDropbox = dbxToken;
+  if (!hasAnthropic || !hasOpenai || !hasDropbox) {
+    toggleConfig(true);
+  }
+}, 200);
 </script>
 </body>
 </html>
