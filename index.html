@@ -55,7 +55,7 @@
   }
   input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
   input[type="password"] { font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
-  textarea { resize: vertical; min-height: 70px; }
+  textarea { resize: vertical; min-height: 140px; }
   .key-row { display: flex; gap: 0.5rem; align-items: center; }
   .key-row input { flex: 1; }
   .toggle-vis {
@@ -328,7 +328,7 @@
       </div>
       <div class="tab-pane" id="tab-save">
         <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.7;">
-          Your script &amp; sources are saved automatically to Dropbox after each generation. Download the MP3 below — drag it to your local Dropbox folder and it will sync to all your devices.
+          Your script, sources, and MP3 audio are all saved automatically to Dropbox after each generation. You can also download copies below.
         </p>
         <div class="download-row" style="justify-content:flex-start;flex-wrap:wrap;">
           <a class="dl-btn primary" id="downloadMp3b" download="ai-finance-briefing.mp3">⬇ Download MP3</a>
@@ -338,7 +338,7 @@
         <div style="margin-top:1.25rem;padding:0.9rem 1.1rem;background:#f0f6ff;border:1px solid #c0d8f8;border-radius:2px;font-size:0.82rem;color:#1a2a4a;line-height:1.7;">
           <strong style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--dropbox);">📁 Dropbox Locations</strong><br>
           Scripts &amp; metadata (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/memory.json</code><br>
-          MP3 audio (manual): download above, then drag into <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/</code>
+          MP3 audio (auto-synced): <code style="background:#dce8fa;padding:0.1rem 0.35rem;border-radius:2px;font-family:'DM Mono',monospace;font-size:0.8rem;">Dropbox/Apps/AI_Podcast_Briefing/audio/</code>
         </div>
       </div>
     </div>
@@ -454,6 +454,28 @@ async function dbxUploadMemory(data) {
   if (!r.ok) {
     const t = await r.text();
     throw new Error(`Dropbox write error (${r.status}): ${t.slice(0,200)}`);
+  }
+  return await r.json();
+}
+
+async function dbxUploadAudio(blob, path) {
+  const r = await fetch(DBX_UPLOAD_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${dbxToken}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({
+        path: path,
+        mode: 'overwrite',
+        autorename: false,
+        mute: true
+      })
+    },
+    body: blob
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Dropbox audio upload error (${r.status}): ${t.slice(0,200)}`);
   }
   return await r.json();
 }
@@ -941,10 +963,19 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
     setStep(3,'done');
 
     // ── Step 4: Save to Dropbox ──
-    setStep(4,'active','Saving to Dropbox…');
+    setStep(4,'active','Saving script to Dropbox…');
     const topicSummary = researchText.replace(/^[\s\-\*•]+/gm,'').split('\n')
       .filter(l=>l.trim().length>20).slice(0,3).map(l=>l.trim().slice(0,80)).join(' · ');
     await saveEpisode(dateStr, topicSummary, currentScript, sources, extractedEntities, newPendingTopics);
+
+    // Upload MP3 to Dropbox /audio/ folder
+    setStep(4,'active','Uploading MP3 to Dropbox…');
+    try {
+      await dbxUploadAudio(currentAudioBlob, `/audio/${fname}`);
+    } catch(audioErr) {
+      console.warn('MP3 upload failed (non-fatal):', audioErr);
+      // Don't block the pipeline — script is already saved
+    }
     setStep(4,'done','Saved to Dropbox ✓');
 
     renderSources(sources, dateStr);
