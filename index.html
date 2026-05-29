@@ -645,16 +645,27 @@ function updateStatusAfterLoad() {
 }
 
 // ── Save episode to Dropbox ──
-async function saveEpisode(date, topics, script, sources = [], entities = [], pending_topics = []) {
-  // Read current state first — safe for multi-device use
+// NON-DESTRUCTIVE: dbxDownloadMemory() returns null ONLY when the file genuinely
+// doesn't exist (HTTP 409). Any other read failure (network/token/5xx) throws —
+// and we must NOT overwrite in that case. Overwriting after a failed read is what
+// previously collapsed the whole archive to a single episode when a generation
+// was interrupted mid-run.
+async function saveEpisode(date, ep) {
   let data = { episodes: [] };
+  let existing;
   try {
-    const existing = await dbxDownloadMemory();
-    if (existing && Array.isArray(existing.episodes)) data = existing;
-  } catch { /* first episode ever */ }
+    existing = await dbxDownloadMemory(); // null => file not found (safe: first episode)
+  } catch (readErr) {
+    throw new Error(
+      'Could not read your existing archive from Dropbox, so this episode was NOT saved ' +
+      '(to protect your history from being overwritten). Your script and audio are ready ' +
+      'above — check your connection and press Generate again. Details: ' + readErr.message
+    );
+  }
+  if (existing && Array.isArray(existing.episodes)) data = existing;
 
-  const newEp = { date, topics, script, sources, entities, pending_topics, savedAt: new Date().toISOString() };
-  data.episodes = data.episodes.filter(ep => ep.date !== date); // remove any same-day duplicate
+  const newEp = Object.assign({ date, savedAt: new Date().toISOString() }, ep);
+  data.episodes = data.episodes.filter(e => e.date !== date); // replace any same-day episode
   data.episodes.unshift(newEp); // newest first
   await dbxUploadMemory(data);
 
@@ -726,15 +737,52 @@ async function clearToday() {
 }
 
 // ── History context for deduplication, entity tracking & pending topics ──
+// Theme-level saturation ledger built from clean theme tags (with a fallback for
+// legacy episodes that only have the old free-text "topics" field).
+function buildThemeLedger(windowSize = 14) {
+  const counts = new Map();
+  for (const ep of episodeHistory.slice(0, windowSize)) {
+    const themes = (Array.isArray(ep.themes) && ep.themes.length)
+      ? ep.themes
+      : (ep.topics ? [ep.topics] : []);
+    for (const raw of themes) {
+      const t = String(raw).trim();
+      if (!t) continue;
+      const key = t.toLowerCase();
+      const cur = counts.get(key) || { theme: t, count: 0, lastDate: ep.date };
+      cur.count += 1;
+      if (ep.date > cur.lastDate) cur.lastDate = ep.date;
+      counts.set(key, cur);
+    }
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
 function buildHistoryContext() {
   if (episodeHistory.length === 0) return '';
-  const lines = episodeHistory.slice(0, 10).map(ep => `- ${ep.date}: ${ep.topics}`).join('\n');
-  let ctx = `\n\nIMPORTANT — Topics already covered in recent episodes. Do NOT repeat these exact stories; find genuinely new developments or new angles:\n${lines}`;
 
-  // Pending topics: big stories split across multiple days
+  const ledger = buildThemeLedger();
+  const saturated = ledger.filter(t => t.count >= 2);
+  const touchedOnce = ledger.filter(t => t.count === 1);
+
+  let ctx = '';
+
+  if (saturated.length) {
+    ctx += `\n\nSATURATED THEMES — covered REPEATEDLY in recent episodes:\n` +
+      saturated.map(t => `- "${t.theme}" — ${t.count}× (last on ${t.lastDate})`).join('\n') +
+      `\n\nRULE for saturated themes — do NOT include them again UNLESS:\n` +
+      `  (a) there is a genuinely MATERIAL new development since the last mention — if so, LEAD with what is actually new and skip the recap; OR\n` +
+      `  (b) the theme has a HARD deadline (consultation close, in-force/compliance date) within the next 7 days — if so, a single-sentence reminder is allowed.\n` +
+      `Otherwise leave them out and use the slot for something fresh.`;
+  }
+  if (touchedOnce.length) {
+    ctx += `\n\nRECENTLY TOUCHED (once) — don't simply repeat; only revisit with a clearly new angle:\n` +
+      touchedOnce.slice(0, 15).map(t => `- "${t.theme}" (${t.lastDate})`).join('\n');
+  }
+
   const pending = getPendingTopics();
   if (pending.length > 0) {
-    ctx += `\n\nPENDING FOLLOW-UP TOPICS — These are continuation angles from recent big stories that should be covered today if relevant news supports them:\n`;
+    ctx += `\n\nPENDING FOLLOW-UP TOPICS — continuation angles from recent big stories; cover today if the news supports them:\n`;
     pending.forEach(p => {
       ctx += `- [From ${p.originDate}] ${p.entity || 'General'}: ${p.angle} (original story: ${p.originalHeadline})\n`;
     });
@@ -774,6 +822,36 @@ function buildEntityContext(researchText) {
     ctx += `\n${m.name}:\n`;
     m.history.forEach(h => ctx += `  - ${h}\n`);
   });
+  return ctx;
+}
+
+// ── Rhetoric memory: avoid repeating recent openings/sign-offs/framings ──
+const BANNED_FRAMINGS = [
+  'moving beyond experimentation to scaled deployment',
+  'beyond experimentation to deployment',
+  "it's no longer a question of if but when",
+  'a question of if but when',
+  'the genie is out of the bottle',
+  'sea change', 'paradigm shift', 'watershed moment',
+  'only time will tell', 'watch this space', 'brave new world'
+];
+function buildFramingContext() {
+  const recent = episodeHistory.slice(0, 5);
+  const openings = [], signoffs = [], phrases = [];
+  for (const ep of recent) {
+    const f = ep.framings || {};
+    if (f.opening_move) openings.push(`[${ep.date}] ${f.opening_move}`);
+    if (f.signoff) signoffs.push(`[${ep.date}] ${f.signoff}`);
+    if (Array.isArray(f.stock_phrases)) phrases.push(...f.stock_phrases);
+  }
+  let ctx = `\n\nRECENT FRAMINGS TO AVOID — vary your rhetoric; do not reuse these:`;
+  ctx += `\n- Always-banned filler: ${BANNED_FRAMINGS.map(p => `"${p}"`).join(', ')}.`;
+  if (openings.length) ctx += `\n- Recent opening framings (find a different way into the first story): ${openings.join(' | ')}`;
+  if (signoffs.length) ctx += `\n- Recent sign-offs (use a fresh one): ${signoffs.join(' | ')}`;
+  if (phrases.length) {
+    const uniq = [...new Set(phrases.map(p => String(p).toLowerCase()))].slice(0, 20);
+    if (uniq.length) ctx += `\n- Phrases used recently (avoid): ${uniq.map(p => `"${p}"`).join(', ')}`;
+  }
   return ctx;
 }
 
@@ -901,7 +979,6 @@ async function generate() {
   document.getElementById('outputPanel').classList.remove('visible');
 
   const wordCount = {3:450,5:750,8:1200}[duration];
-  const focusNote = focus ? `\n\nThe user is particularly interested in: ${focus}` : '';
   const historyNote = buildHistoryContext();
 
   try {
@@ -918,23 +995,36 @@ async function generate() {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
+        max_tokens: 3500,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content:
-          `You are a financial technology journalist with a particular focus on the UK and European financial services landscape, while maintaining strong global awareness. Search for the most important developments from the last 7 days relating to:
-1. Artificial intelligence in financial services — with emphasis on UK banks, insurers, and asset managers (e.g. Lloyds, Barclays, HSBC, NatWest, Aviva, Schroders, etc.) as well as major global players
-2. UK FCA, PRA, and Bank of England developments relating to AI, plus EU AI Act implementation and other international regulatory developments
-3. Major AI research breakthroughs or product launches that could impact finance (from any geography)
-4. Notable AI partnerships, agentic AI deployments, or fintech developments — prioritise UK and EU stories but include significant global ones
-${focusNote}${historyNote}
+          `You are a financial technology journalist focused on the UK and European financial services landscape, with strong global awareness. Today is ${new Date().toISOString().slice(0,10)}. Your job is to surface a WIDE, well-sourced pool of candidate stories from the last 7 days — broader than a single episode will use — so the best can be curated afterwards.
 
-Return a concise bullet-point summary of the 5 most newsworthy items only. Keep total response under 500 words. Include source name for each item. Prioritise genuinely new developments over stories already listed above as covered.`
+Run SEVERAL distinct web searches, not one. Cover these angles:
+1. AI in financial services — UK banks, insurers, asset managers (Lloyds, Barclays, HSBC, NatWest, Aviva, L&G, Schroders, LSEG) and major global players
+2. UK FCA / PRA / Bank of England activity on AI; EU AI Act implementation milestones; other material regulatory moves
+3. AI research breakthroughs or product launches relevant to finance
+4. Agentic AI deployments, notable partnerships, and fintech developments (prioritise UK/EU, include significant global)
+
+CRITICALLY, also run DEDICATED searches tuned to the listener's specific professional focus areas below. These are exactly the lanes where useful stories are most often being missed — colleagues routinely surface public items here that a single generic sweep overlooks. Treat each as its own search where it could plausibly have produced news in the last 7 days, and actively look for practitioner, vendor and trade coverage (company blogs, vendor announcements, industry/trade press, reputable Substacks), not just mainstream headlines:
+${focus || '(none specified)'}
+${historyNote}
+
+For ANY story you include, note whether it carries a HARD deadline (consultation close, regulation in-force date, compliance date) within the next 7 days — these are reminder-eligible even when the broad theme is saturated.
+
+OUTPUT — a ranked list of the 10–12 most newsworthy CANDIDATE items (most important first). For each item give, tightly:
+- Headline
+- One sentence on what is genuinely NEW (not background)
+- Primary theme as a short canonical tag (2–4 words, e.g. "EU AI Act", "agentic AI in banking", "BoE supervision")
+- Source name + publication date
+- Any hard deadline within 7 days, if applicable
+Respect the SATURATED THEMES rule above when deciding what to include. Provide MORE candidates than one episode needs — curation happens next.`
         }]
       })
     });
     if (!r1.ok) { const e = await r1.json(); throw new Error(`Research error: ${e.error?.message||r1.statusText}`); }
     const d1 = await r1.json();
-    const researchText = d1.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').slice(0,6000);
+    const researchText = d1.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').slice(0,9000);
 
     // Extract sources
     const sourcesMap = new Map();
@@ -961,6 +1051,7 @@ Return a concise bullet-point summary of the 5 most newsworthy items only. Keep 
 
     // Build entity cross-reference context
     const entityCtx = buildEntityContext(researchText);
+    const framingCtx = buildFramingContext();
     const pendingCtx = getPendingTopics().length > 0
       ? `\n\nPENDING FOLLOW-UP ANGLES from previous days — weave one or two of these in if the research supports them:\n${getPendingTopics().map(p => `- ${p.entity || 'General'}: ${p.angle}`).join('\n')}`
       : '';
@@ -977,11 +1068,17 @@ Return a concise bullet-point summary of the 5 most newsworthy items only. Keep 
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
         messages: [{ role: 'user', content:
-          `You are a skilled podcast script writer. Using the following research briefing, write a polished, engaging podcast script of approximately ${wordCount} words.
+          `You are a skilled podcast script writer. Below is a RANKED POOL of candidate stories — more than one episode should use. CURATE first, then write.
 
-RESEARCH BRIEFING:
+CURATION (do this silently before writing):
+- Select only the items that best fit an episode of approximately ${wordCount} words. It is far better to cover a few stories with genuine insight than to cram many in shallowly.
+- Prioritise, in order: (1) genuine freshness and importance, (2) relevance to the listener's focus areas, (3) variety across the episode.
+- Apply the SATURATED THEMES rule from the briefing: drop saturated themes unless there is a material new development (lead with the new part, skip the recap) or a hard deadline within 7 days (a single-line reminder only).
+- You do not need to use the whole pool.
+
+CANDIDATE STORY POOL (ranked):
 ${researchText}
-${entityCtx}${pendingCtx}
+${entityCtx}${pendingCtx}${framingCtx}
 
 HOST CHARACTER — NEO:
 - Neo is the host of the AI Finance Briefing podcast. He is based in the UK and takes a particular interest in UK financial services firms and UK/EU regulation, while remaining keenly aware of the global picture.
@@ -993,6 +1090,7 @@ SCRIPT REQUIREMENTS:
 - Begin with: "Good morning, and welcome to the AI Finance Briefing. I'm Neo, and here's what matters in AI and financial services this week."
 - Write in a clear, conversational spoken style — as if being read aloud by a thoughtful British professional
 - Cover the top stories naturally, with smooth transitions between topics
+- FRESH FRAMING: Do not reuse the recent openings, sign-offs, or framings listed under "RECENT FRAMINGS TO AVOID" above, and never use the always-banned filler phrases. Find a genuinely different way into the first story each episode and vary your transitions. Avoid generic AI-narrative crutches.
 - ENTITY CROSS-REFERENCES: If an organisation or product has appeared in previous episodes (see ENTITY HISTORY above if present), Neo should briefly reference what was covered before. For example: "We last spoke about Lloyds Banking Group a few days ago in the context of their fraud automation plans — well, they've now taken that a step further..." This builds narrative continuity.
 - TOPIC SPLITTING: If one of today's stories is particularly large or complex, only cover one angle of it today. Don't try to exhaust a big story in one episode.
 - Include brief analysis or implications for finance professionals where relevant
@@ -1002,18 +1100,23 @@ SCRIPT REQUIREMENTS:
 
 AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... \`\`\` containing:
 {
+  "themes": ["EU AI Act", "agentic AI in banking", ...],
+  "display_topics": "One clean human-readable sentence summarising the episode's stories",
   "entities": ["Company A", "Company B", ...],
+  "framings": {
+    "opening_move": "≤10 words describing how you framed the first story (NOT the fixed greeting)",
+    "signoff": "the exact sign-off line you used",
+    "stock_phrases": ["any notable framing phrases you used that should not be reused next time"]
+  },
   "pending_topics": [
-    {
-      "entity": "Company or topic name",
-      "originalHeadline": "Brief description of the big story",
-      "angle": "The specific follow-up angle to cover tomorrow",
-      "originDate": "${new Date().toISOString().slice(0,10)}"
-    }
+    { "entity": "Company or topic name", "originalHeadline": "Brief description of the big story", "angle": "The specific follow-up angle to cover in a future episode", "originDate": "${new Date().toISOString().slice(0,10)}" }
   ]
 }
-- "entities": list every company, organisation, regulator, or product name mentioned in the script
-- "pending_topics": if any story today was big enough that you deliberately held back detail, create 1-2 follow-up angles to cover in future episodes. If no stories need splitting, return an empty array.`
+- "themes": 3–7 normalised, reusable theme tags for the stories ACTUALLY covered. These power de-duplication, so keep them canonical and consistent across episodes (e.g. always "EU AI Act", never "the EU's AI Act" or "EU AI regulation").
+- "display_topics": a clean one-liner for the archive — no markdown, no preamble, no "I'll search…".
+- "entities": every company, organisation, regulator, or product named in the script.
+- "framings": capture how you opened and closed so future episodes can avoid repeating them.
+- "pending_topics": if a story was big enough that you deliberately held detail back, add 1–2 follow-up angles; otherwise return an empty array.`
         }]
       })
     });
@@ -1025,6 +1128,9 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
     let scriptOnly = rawOutput;
     let extractedEntities = [];
     let newPendingTopics = [];
+    let extractedThemes = [];
+    let displayTopics = '';
+    let framings = {};
     const jsonMatch = rawOutput.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
       scriptOnly = rawOutput.slice(0, jsonMatch.index).trim();
@@ -1032,6 +1138,9 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
         const meta = JSON.parse(jsonMatch[1]);
         extractedEntities = meta.entities || [];
         newPendingTopics = meta.pending_topics || [];
+        extractedThemes = meta.themes || [];
+        displayTopics = meta.display_topics || '';
+        framings = meta.framings || {};
       } catch(e) { console.warn('Failed to parse script metadata:', e); }
     }
 
@@ -1066,11 +1175,25 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
     });
     setStep(3,'done');
 
-    // ── Step 4: Save to Dropbox ──
+    // Reveal the finished script + audio BEFORE saving, so they remain available
+    // to the user even if the Dropbox save step fails (non-destructive guard).
+    renderSources(sources, dateStr);
+    document.getElementById('outputPanel').classList.add('visible');
+    document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // ── Step 4: Save to Dropbox (non-destructive) ──
     setStep(4,'active','Saving metadata to Dropbox…');
-    const topicSummary = researchText.replace(/^[\s\-\*•]+/gm,'').split('\n')
-      .filter(l=>l.trim().length>20).slice(0,3).map(l=>l.trim().slice(0,80)).join(' · ');
-    await saveEpisode(dateStr, topicSummary, currentScript, sources, extractedEntities, newPendingTopics);
+    const cleanTopics = displayTopics
+      || (extractedThemes.length ? extractedThemes.join(' · ') : 'Topics not recorded');
+    await saveEpisode(dateStr, {
+      topics: cleanTopics,
+      themes: extractedThemes,
+      script: currentScript,
+      sources,
+      entities: extractedEntities,
+      framings,
+      pending_topics: newPendingTopics
+    });
 
     // Upload script .txt to Dropbox /scripts/ folder
     setStep(4,'active','Uploading script to Dropbox…');
@@ -1090,10 +1213,6 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
       console.warn('MP3 upload failed:', audioErr);
     }
     setStep(4,'done','Saved to Dropbox ✓');
-
-    renderSources(sources, dateStr);
-    document.getElementById('outputPanel').classList.add('visible');
-    document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   } catch(err) {
     console.error(err);
@@ -1267,6 +1386,12 @@ document.getElementById('anthropicKey').addEventListener('change', function() {
 });
 document.getElementById('openaiKey').addEventListener('change', function() {
   localStorage.setItem('openai_key', this.value.trim());
+});
+// Persist the focus-areas profile (auto-biases every research sweep)
+const savedFocus = localStorage.getItem('focus_areas');
+if (savedFocus !== null) document.getElementById('focusAreas').value = savedFocus;
+document.getElementById('focusAreas').addEventListener('change', function() {
+  localStorage.setItem('focus_areas', this.value);
 });
 loadSavedToken();
 // If we have a refresh token, verify connection and load archive
