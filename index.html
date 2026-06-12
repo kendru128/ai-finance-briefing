@@ -306,6 +306,10 @@
           <label>Focus Areas (edit or overwrite as needed)</label>
           <textarea id="focusAreas">CRM, Client and Customer Relationship Management, Low Code, Agentic AI and Agents, AWS, Bedrock, Kiro, Google Antigravity, Claude, Gemini, ChatGPT, OpenAI, xAI, Retail Banking, Business Banking, Commercial Mid Market, Private Banking and Wealth Management, Capital Markets, Personal Productivity, Microsoft Power Platform, M365, Copilot, Dynamics365, UK FCA, PRA, Bank of England, EU AI Act, Lloyds Banking Group, Barclays, HSBC, NatWest, Aviva, Legal and General, Schroders, London Stock Exchange Group</textarea>
         </div>
+        <div class="field full">
+          <label>Preferred Sources (one URL or domain per line — research will prioritise these)</label>
+          <textarea id="preferredSources" placeholder="e.g.&#10;https://www.finextra.com&#10;thefintechtimes.com&#10;https://sifted.eu"></textarea>
+        </div>
       </div>
     </div>
 
@@ -980,12 +984,39 @@ function exportArchive() {
 // ═══════════════════════════════════════════════════════════════
 // GENERATION PIPELINE
 // ═══════════════════════════════════════════════════════════════
+// Turn the preferred-sources textarea (one URL/domain per line) into a clean,
+// de-duplicated list of bare domains for biasing search. Tolerant of full URLs,
+// trailing paths, "www.", blank lines, and stray whitespace.
+function normalisePreferredSources(raw) {
+  if (!raw) return [];
+  const out = [];
+  const seen = new Set();
+  for (let line of String(raw).split('\n')) {
+    line = line.trim();
+    if (!line) continue;
+    let domain = line
+      .replace(/^https?:\/\//i, '')   // strip scheme
+      .replace(/^www\./i, '')          // strip www.
+      .split('/')[0]                    // drop any path
+      .split('?')[0]
+      .trim()
+      .toLowerCase();
+    if (!domain || !domain.includes('.')) continue; // must look like a domain
+    if (seen.has(domain)) continue;
+    seen.add(domain);
+    out.push(domain);
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
 async function generate() {
   const anthropicKey = document.getElementById('anthropicKey').value.trim();
   const openaiKey = document.getElementById('openaiKey').value.trim();
   const duration = document.getElementById('duration').value;
   const voice = document.getElementById('voice').value;
   const focus = document.getElementById('focusAreas').value.trim();
+  const preferredSources = normalisePreferredSources(document.getElementById('preferredSources').value);
 
   clearError();
   if (!anthropicKey || !openaiKey) { toggleConfig(true); showError('Please enter both API keys.'); return; }
@@ -1002,6 +1033,9 @@ async function generate() {
   const wordCount = {3:450,5:750,8:1200}[duration];
   const today = new Date().toISOString().slice(0,10);
   const historyNote = buildHistoryContext(today);
+  const sourcesNote = preferredSources.length
+    ? `\n\nPREFERRED SOURCES — the listener trusts these outlets and wants them prioritised. When searching, give extra weight to results from these domains, and proactively run searches scoped to them (e.g. "site:${preferredSources[0]} <topic>") to see what they have published in the last 7 days. Treat them as high-signal, but do NOT limit yourself to them, and apply the same accuracy rules to them as to anything else:\n${preferredSources.map(d => `- ${d}`).join('\n')}`
+    : '';
 
   try {
     // ── Step 1: Research ──
@@ -1030,6 +1064,7 @@ Run SEVERAL distinct web searches, not one. Cover these angles:
 
 CRITICALLY, also run DEDICATED searches tuned to the listener's specific professional focus areas below. These are exactly the lanes where useful stories are most often being missed — colleagues routinely surface public items here that a single generic sweep overlooks. Treat each as its own search where it could plausibly have produced news in the last 7 days, and actively look for practitioner, vendor and trade coverage (company blogs, vendor announcements, industry/trade press, reputable Substacks), not just mainstream headlines:
 ${focus || '(none specified)'}
+${sourcesNote}
 ${historyNote}
 
 ACCURACY IS PARAMOUNT — the listener may repeat these items to colleagues, so a fabricated detail is worse than a missing one. For every candidate, only state facts you actually found in a source. Do NOT invent or guess specific figures, dates, named people, named products/models, or quotes. If you saw a claim but can't confirm a specific (e.g. exactly which model a regulator named), describe it loosely rather than inventing the specific.
@@ -1541,6 +1576,11 @@ const savedFocus = localStorage.getItem('focus_areas');
 if (savedFocus !== null) document.getElementById('focusAreas').value = savedFocus;
 document.getElementById('focusAreas').addEventListener('change', function() {
   localStorage.setItem('focus_areas', this.value);
+});
+const savedPreferredSources = localStorage.getItem('preferred_sources');
+if (savedPreferredSources !== null) document.getElementById('preferredSources').value = savedPreferredSources;
+document.getElementById('preferredSources').addEventListener('change', function() {
+  localStorage.setItem('preferred_sources', this.value);
 });
 loadSavedToken();
 // If we have a refresh token, verify connection and load archive
