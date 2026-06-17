@@ -1125,7 +1125,7 @@ Apply the HARD SUPPRESSION RULE above: do not propose stories that have already 
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 4000,
         messages: [{ role: 'user', content:
           `You are a skilled podcast script writer. Below is a RANKED POOL of candidate stories — more than one episode should use. CURATE first, then write.
@@ -1236,7 +1236,7 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1500,
           messages: [{ role: 'user', content:
             `You are a fact-checker. Below is a RESEARCH POOL (the only permitted source of facts) and a SCRIPT drafted from it. Identify every specific factual claim in the SCRIPT that is NOT supported by the RESEARCH POOL — especially: named individuals, direct quotes, named AI models or products, named companies, statistics, percentages, monetary figures, and dates. A claim is UNSUPPORTED if the pool does not state it, even if it sounds plausible. Pay special attention to attributions of the form "[named person/regulator] said/named/cited [specific thing]" where the specific thing is not in the pool.
@@ -1279,7 +1279,7 @@ If everything is supported, return {"flags": []}.`
             'anthropic-dangerous-direct-browser-access': 'true'
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 4000,
             messages: [{ role: 'user', content:
               `Below is a podcast script and a list of specific claims in it that are NOT supported by the underlying research. Produce a corrected version of the script: for each flagged claim, either delete it or soften it to only what is supported (e.g. remove an unsupported named model, or change "X named Y" to a general statement). Change NOTHING else — keep the same structure, tone, opening line, sign-off, and all the well-supported content. Output ONLY the corrected script text, with no commentary and no JSON.
@@ -1411,7 +1411,7 @@ async function runTrendAnalysis() {
         'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 1500,
+        model: 'claude-sonnet-4-6', max_tokens: 1500,
         messages: [{ role: 'user', content:
           `You are an expert analyst of AI and financial services trends. The user runs a daily podcast called "AI Finance Briefing" hosted by Neo, with ${episodeHistory.length} episodes in the archive.\n\nEPISODE SCRIPTS:\n${corpus}\n\nUSER QUESTION: ${query}\n\nProvide a thoughtful, structured analysis. Reference specific episodes and dates where relevant.`
         }]
