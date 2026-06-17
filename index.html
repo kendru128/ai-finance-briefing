@@ -1308,17 +1308,72 @@ ${currentScript}`
     setStep(2,'done');
 
     // ── Step 3: TTS ──
-    setStep(3,'active');
+    setStep(3,'active','Converting script to audio with OpenAI TTS…');
     const chunks = chunkText(currentScript, 4000);
     const audioBuffers = [];
-    for (const chunk of chunks) {
-      const tr = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-        body: JSON.stringify({ model: 'tts-1', input: chunk, voice, response_format: 'mp3' })
-      });
-      if (!tr.ok) { const e = await tr.json().catch(()=>({})); throw new Error(`TTS error: ${e.error?.message||tr.statusText}`); }
-      audioBuffers.push(await tr.arrayBuffer());
+    const TTS_TIMEOUT_MS = 90000;   // per-request hard ceiling — no more infinite hangs
+    const TTS_MAX_ATTEMPTS = 3;     // initial try + 2 retries for transient failures
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const label = chunks.length > 1 ? `chunk ${ci+1}/${chunks.length}` : 'the audio';
+      let ok = false, lastErr = null;
+      for (let attempt = 1; attempt <= TTS_MAX_ATTEMPTS && !ok; attempt++) {
+        setStep(3,'active', attempt === 1
+          ? `Converting ${label} to audio…`
+          : `Retrying ${label} (attempt ${attempt}/${TTS_MAX_ATTEMPTS})…`);
+        const t0 = performance.now();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TTS_TIMEOUT_MS);
+        try {
+          const tr = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
+            body: JSON.stringify({ model: 'tts-1', input: chunk, voice, response_format: 'mp3' }),
+            signal: controller.signal
+          });
+          clearTimeout(timer);
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          if (!tr.ok) {
+            let detail = tr.statusText;
+            try { const e = await tr.json(); detail = e.error?.message || detail; } catch {}
+            const msg = `OpenAI TTS ${tr.status} on ${label}: ${detail}`;
+            // 429 (rate limit) and 5xx (server) are transient → retry; others are fatal.
+            if (tr.status === 429 || tr.status >= 500) {
+              lastErr = new Error(msg);
+              const wait = tr.status === 429
+                ? (parseFloat(tr.headers.get('retry-after')) || attempt * 5)
+                : attempt * 2;
+              console.warn(`[TTS] ${label} attempt ${attempt} failed in ${secs}s: ${msg} — retrying in ${wait}s`);
+              if (attempt < TTS_MAX_ATTEMPTS) {
+                setStep(3,'active', `OpenAI returned ${tr.status} — waiting ${Math.round(wait)}s before retry…`);
+                await new Promise(r => setTimeout(r, wait * 1000));
+              }
+              continue;
+            }
+            const fatal = new Error(msg + ' — this is a request/auth problem, not a transient one. Check your OpenAI API key, billing, and account status.');
+            fatal.fatal = true;
+            throw fatal;
+          }
+          audioBuffers.push(await tr.arrayBuffer());
+          console.log(`[TTS] ${label} OK in ${secs}s (attempt ${attempt}, ${chunk.length} chars)`);
+          ok = true;
+        } catch (err) {
+          clearTimeout(timer);
+          if (err.fatal) throw err; // non-retryable — stop immediately
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          if (err.name === 'AbortError') {
+            lastErr = new Error(`OpenAI TTS timed out after ${TTS_TIMEOUT_MS/1000}s on ${label} (attempt ${attempt}) — OpenAI may be slow or unresponsive right now.`);
+          } else {
+            lastErr = new Error(`TTS network error on ${label} (attempt ${attempt}): ${err.message}`);
+          }
+          console.warn(`[TTS] ${lastErr.message} (after ${secs}s)`);
+          if (attempt < TTS_MAX_ATTEMPTS) await new Promise(r => setTimeout(r, attempt * 2000));
+        }
+      }
+      if (!ok) {
+        throw new Error((lastErr?.message || `TTS failed on ${label}`) +
+          ` — stopped after ${TTS_MAX_ATTEMPTS} attempts. Your script is ready above; check status.openai.com or your OpenAI usage limits, then press Generate again.`);
+      }
     }
     const total = audioBuffers.reduce((s,b)=>s+b.byteLength,0);
     const merged = new Uint8Array(total);
