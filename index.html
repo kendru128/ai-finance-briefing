@@ -1101,7 +1101,23 @@ Apply the HARD SUPPRESSION RULE above: do not propose stories that have already 
     });
     if (!r1.ok) { const e = await r1.json(); throw new Error(`Research error: ${e.error?.message||r1.statusText}`); }
     const d1 = await r1.json();
-    const researchText = d1.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').slice(0,9000);
+    // Diagnostic: expose the raw research response + stop_reason to the console so empty-pool
+    // cases can be debugged. Also count how many web_search_tool_result blocks came back.
+    const toolResultCount = (d1.content || []).filter(b => b.type === 'web_search_tool_result').length;
+    const textBlockCount  = (d1.content || []).filter(b => b.type === 'text').length;
+    console.log('[Research] model:', resolveResearchModel(), '| stop_reason:', d1.stop_reason,
+      '| text blocks:', textBlockCount, '| web_search results:', toolResultCount,
+      '| usage:', d1.usage, '| full response:', d1);
+    const researchText = (d1.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n').slice(0,9000);
+    // Fail fast if the pool is too thin to write a script from — don't let Sonnet produce
+    // a "holding script" apology. 500 chars is well below what a usable pool needs.
+    if (researchText.trim().length < 500) {
+      throw new Error(
+        `The research step returned too little usable text (${researchText.trim().length} chars` +
+        `, ${toolResultCount} search result${toolResultCount===1?'':'s'}, stop_reason: ${d1.stop_reason||'unknown'}). ` +
+        `This usually means the research model didn't run its web searches. Try opening Configure and picking a specific older Haiku from the Research Model dropdown (not "Auto"), then regenerate. Full response logged to console for inspection.`
+      );
+    }
 
     // Extract sources
     const sourcesMap = new Map();
