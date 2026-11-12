@@ -1208,7 +1208,9 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
     });
     if (!r2.ok) { const e = await r2.json(); throw new Error(`Script error: ${e.error?.message||r2.statusText}`); }
     const d2 = await r2.json();
-    const rawOutput = d2.content[0].text;
+    // Safely collect all text blocks — newer models may emit a non-text (e.g. thinking) block first,
+    // so d2.content[0].text could be undefined. The research step uses the same pattern.
+    const rawOutput = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 
     // Parse script and metadata
     let scriptOnly = rawOutput;
@@ -1492,7 +1494,8 @@ async function runTrendAnalysis() {
     if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || r.statusText); }
     const d = await r.json();
     output.className = 'trend-output';
-    output.textContent = d.content[0].text;
+    // Safely join all text blocks (newer models may lead with non-text content)
+    output.textContent = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   } catch(err) {
     output.className = 'trend-output';
     output.textContent = 'Error: ' + err.message;
