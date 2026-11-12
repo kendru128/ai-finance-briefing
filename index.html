@@ -284,6 +284,23 @@
         </div>
 
         <div class="field">
+          <label>Research Model
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;color:var(--muted);font-size:0.72rem;">— Haiku recommended (fast, cheap, web search)</span>
+          </label>
+          <select id="researchModel">
+            <option value="auto" selected>Auto — always use latest Haiku</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Script Model
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif;margin-left:0.5rem;color:var(--muted);font-size:0.72rem;">— Sonnet recommended (quality writing + fact-check)</span>
+          </label>
+          <select id="scriptModel">
+            <option value="auto" selected>Auto — always use latest Sonnet</option>
+          </select>
+          <div class="info-tip" id="modelListStatus" style="margin-top:0.35rem;">Model list will refresh when you enter your Anthropic API key above.</div>
+        </div>
+        <div class="field">
           <label>Podcast Duration</label>
           <select id="duration">
             <option value="3">~3 minutes (brief)</option>
@@ -1050,7 +1067,7 @@ async function generate() {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: resolveResearchModel(),
         max_tokens: 3500,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content:
@@ -1125,7 +1142,7 @@ Apply the HARD SUPPRESSION RULE above: do not propose stories that have already 
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: resolveScriptModel(),
         max_tokens: 4000,
         messages: [{ role: 'user', content:
           `You are a skilled podcast script writer. Below is a RANKED POOL of candidate stories — more than one episode should use. CURATE first, then write.
@@ -1236,7 +1253,7 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: resolveScriptModel(),
           max_tokens: 1500,
           messages: [{ role: 'user', content:
             `You are a fact-checker. Below is a RESEARCH POOL (the only permitted source of facts) and a SCRIPT drafted from it. Identify every specific factual claim in the SCRIPT that is NOT supported by the RESEARCH POOL — especially: named individuals, direct quotes, named AI models or products, named companies, statistics, percentages, monetary figures, and dates. A claim is UNSUPPORTED if the pool does not state it, even if it sounds plausible. Pay special attention to attributions of the form "[named person/regulator] said/named/cited [specific thing]" where the specific thing is not in the pool.
@@ -1279,7 +1296,7 @@ If everything is supported, return {"flags": []}.`
             'anthropic-dangerous-direct-browser-access': 'true'
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
+            model: resolveScriptModel(),
             max_tokens: 4000,
             messages: [{ role: 'user', content:
               `Below is a podcast script and a list of specific claims in it that are NOT supported by the underlying research. Produce a corrected version of the script: for each flagged claim, either delete it or soften it to only what is supported (e.g. remove an unsupported named model, or change "X named Y" to a general statement). Change NOTHING else — keep the same structure, tone, opening line, sign-off, and all the well-supported content. Output ONLY the corrected script text, with no commentary and no JSON.
@@ -1466,7 +1483,7 @@ async function runTrendAnalysis() {
         'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6', max_tokens: 1500,
+        model: resolveScriptModel(), max_tokens: 1500,
         messages: [{ role: 'user', content:
           `You are an expert analyst of AI and financial services trends. The user runs a daily podcast called "AI Finance Briefing" hosted by Neo, with ${episodeHistory.length} episodes in the archive.\n\nEPISODE SCRIPTS:\n${corpus}\n\nUSER QUESTION: ${query}\n\nProvide a thoughtful, structured analysis. Reference specific episodes and dates where relevant.`
         }]
@@ -1606,6 +1623,106 @@ function formatDate(iso) {
   catch { return iso; }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// CLAUDE MODEL SELECTION — dynamic, self-updating
+// ═══════════════════════════════════════════════════════════════════
+// "Auto" picks the newest model in each line (haiku/sonnet) from
+// Anthropic's /v1/models endpoint, so new releases are picked up
+// automatically with zero code changes. Specific choices are remembered.
+
+// Fallback defaults if the models endpoint can't be reached (e.g. no API key yet)
+const FALLBACK_RESEARCH_MODEL = 'claude-haiku-5-5';
+const FALLBACK_SCRIPT_MODEL   = 'claude-sonnet-5-5';
+
+let availableModels = [];  // populated from /v1/models
+let researchModelPref = localStorage.getItem('research_model') || 'auto';
+let scriptModelPref   = localStorage.getItem('script_model')   || 'auto';
+
+function newestInLine(line, fallback) {
+  const candidates = availableModels
+    .filter(m => m.line === line)
+    .sort((a, b) => (b.created_at || b.id).localeCompare(a.created_at || a.id));
+  return candidates[0]?.id || fallback;
+}
+
+function resolveResearchModel() {
+  return researchModelPref === 'auto' ? newestInLine('haiku', FALLBACK_RESEARCH_MODEL) : researchModelPref;
+}
+function resolveScriptModel() {
+  return scriptModelPref === 'auto' ? newestInLine('sonnet', FALLBACK_SCRIPT_MODEL) : scriptModelPref;
+}
+
+async function fetchAvailableModels() {
+  const key = document.getElementById('anthropicKey').value.trim();
+  const statusEl = document.getElementById('modelListStatus');
+  if (!key) {
+    if (statusEl) statusEl.textContent = 'Model list will refresh when you enter your Anthropic API key above.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Fetching available models from Anthropic…';
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      }
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      throw new Error(e.error?.message || r.statusText);
+    }
+    const data = await r.json();
+    availableModels = Array.isArray(data.data) ? data.data : [];
+    populateModelDropdowns();
+    if (statusEl) {
+      const haikuLatest = newestInLine('haiku', FALLBACK_RESEARCH_MODEL);
+      const sonnetLatest = newestInLine('sonnet', FALLBACK_SCRIPT_MODEL);
+      statusEl.innerHTML = `Model list refreshed — ${availableModels.length} models available. Latest Haiku: <code>${haikuLatest}</code>; latest Sonnet: <code>${sonnetLatest}</code>.`;
+    }
+  } catch(e) {
+    console.warn('Could not fetch model list:', e.message);
+    if (statusEl) statusEl.textContent = `Couldn't fetch model list (${e.message}) — using fallbacks (${FALLBACK_RESEARCH_MODEL} / ${FALLBACK_SCRIPT_MODEL}).`;
+  }
+}
+
+function populateModelDropdowns() {
+  const researchSel = document.getElementById('researchModel');
+  const scriptSel   = document.getElementById('scriptModel');
+  if (!researchSel || !scriptSel) return;
+
+  // Group by line, newest-first within each line
+  const sorted = [...availableModels].sort((a, b) => {
+    const lineOrder = { haiku: 1, sonnet: 2, opus: 3, fable: 4, mythos: 5 };
+    const la = lineOrder[a.line] || 9, lb = lineOrder[b.line] || 9;
+    if (la !== lb) return la - lb;
+    return (b.created_at || b.id).localeCompare(a.created_at || a.id);
+  });
+
+  const buildOptions = (currentValue, autoLabel) => {
+    let html = `<option value="auto"${currentValue === 'auto' ? ' selected' : ''}>${autoLabel}</option>`;
+    let currentLine = null;
+    for (const m of sorted) {
+      if (m.line !== currentLine) {
+        if (currentLine !== null) html += `</optgroup>`;
+        const lineName = (m.line || 'other').charAt(0).toUpperCase() + (m.line || 'other').slice(1);
+        html += `<optgroup label="${lineName}">`;
+        currentLine = m.line;
+      }
+      const label = m.display_name || m.id;
+      const selected = m.id === currentValue ? ' selected' : '';
+      html += `<option value="${m.id}"${selected}>${label}</option>`;
+    }
+    if (currentLine !== null) html += `</optgroup>`;
+    return html;
+  };
+
+  const haikuLatest  = newestInLine('haiku',  FALLBACK_RESEARCH_MODEL);
+  const sonnetLatest = newestInLine('sonnet', FALLBACK_SCRIPT_MODEL);
+  researchSel.innerHTML = buildOptions(researchModelPref, `Auto — always use latest Haiku (currently ${haikuLatest})`);
+  scriptSel.innerHTML   = buildOptions(scriptModelPref,   `Auto — always use latest Sonnet (currently ${sonnetLatest})`);
+}
+
 // ── Init ──
 document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-GB', {
   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -1619,12 +1736,22 @@ const savedAnthropicKey = localStorage.getItem('anthropic_key') || '';
 const savedOpenaiKey = localStorage.getItem('openai_key') || '';
 if (savedAnthropicKey) document.getElementById('anthropicKey').value = savedAnthropicKey;
 if (savedOpenaiKey) document.getElementById('openaiKey').value = savedOpenaiKey;
-// Save keys on change
+// Save keys on change — and refresh the model list whenever Anthropic key changes
 document.getElementById('anthropicKey').addEventListener('change', function() {
   localStorage.setItem('anthropic_key', this.value.trim());
+  fetchAvailableModels();
 });
 document.getElementById('openaiKey').addEventListener('change', function() {
   localStorage.setItem('openai_key', this.value.trim());
+});
+// Model preferences — save on change
+document.getElementById('researchModel').addEventListener('change', function() {
+  researchModelPref = this.value;
+  localStorage.setItem('research_model', researchModelPref);
+});
+document.getElementById('scriptModel').addEventListener('change', function() {
+  scriptModelPref = this.value;
+  localStorage.setItem('script_model', scriptModelPref);
 });
 // Persist the focus-areas profile (auto-biases every research sweep)
 const savedFocus = localStorage.getItem('focus_areas');
@@ -1671,6 +1798,13 @@ setTimeout(() => {
     toggleConfig(true);
   }
 }, 200);
+
+// Fetch the live model list on load if we already have an Anthropic key.
+// If not, the dropdowns stay on their "Auto" default — once the key is
+// entered, the change handler above triggers the fetch and populates them.
+if (savedAnthropicKey) {
+  fetchAvailableModels();
+}
 </script>
 </body>
 </html>
