@@ -1073,7 +1073,11 @@ async function generate() {
         // producing a `thinking` block that can consume all of max_tokens before any
         // text is produced — this app has seen 3,700+ thinking tokens leave zero room
         // for the actual response. Research + script here don't need extended thinking.
-        thinking: { type: 'disabled' },
+        // Newer Claude models (5.5+) don't accept thinking.type:'disabled' and instead want
+        // thinking.type:'between_tools' as the off-equivalent. The short updates these models
+        // emit between tool calls come back as thinking blocks — filtering by type==='text'
+        // (which we already do) keeps those out of our parsing regardless.
+        thinking: { type: 'between_tools' },
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content:
           `You are a financial technology journalist focused on the UK and European financial services landscape, with strong global awareness. Today is ${today}. Your job is to surface a WIDE, well-sourced pool of candidate stories from the last 7 days — broader than a single episode will use — so the best can be curated afterwards.
@@ -1165,7 +1169,7 @@ Apply the HARD SUPPRESSION RULE above: do not propose stories that have already 
       body: JSON.stringify({
         model: resolveScriptModel(),
         max_tokens: 4000,
-        thinking: { type: 'disabled' },
+        thinking: { type: 'between_tools' },
         messages: [{ role: 'user', content:
           `You are a skilled podcast script writer. Below is a RANKED POOL of candidate stories — more than one episode should use. CURATE first, then write.
 
@@ -1279,7 +1283,7 @@ AFTER THE SCRIPT, on a new line, output a JSON block fenced with \`\`\`json ... 
         body: JSON.stringify({
           model: resolveScriptModel(),
           max_tokens: 1500,
-          thinking: { type: 'disabled' },
+          thinking: { type: 'between_tools' },
           messages: [{ role: 'user', content:
             `You are a fact-checker. Below is a RESEARCH POOL (the only permitted source of facts) and a SCRIPT drafted from it. Identify every specific factual claim in the SCRIPT that is NOT supported by the RESEARCH POOL — especially: named individuals, direct quotes, named AI models or products, named companies, statistics, percentages, monetary figures, and dates. A claim is UNSUPPORTED if the pool does not state it, even if it sounds plausible. Pay special attention to attributions of the form "[named person/regulator] said/named/cited [specific thing]" where the specific thing is not in the pool.
 
@@ -1323,7 +1327,7 @@ If everything is supported, return {"flags": []}.`
           body: JSON.stringify({
             model: resolveScriptModel(),
             max_tokens: 4000,
-            thinking: { type: 'disabled' },
+            thinking: { type: 'between_tools' },
             messages: [{ role: 'user', content:
               `Below is a podcast script and a list of specific claims in it that are NOT supported by the underlying research. Produce a corrected version of the script: for each flagged claim, either delete it or soften it to only what is supported (e.g. remove an unsupported named model, or change "X named Y" to a general statement). Change NOTHING else — keep the same structure, tone, opening line, sign-off, and all the well-supported content. Output ONLY the corrected script text, with no commentary and no JSON.
 
@@ -1510,7 +1514,7 @@ async function runTrendAnalysis() {
       },
       body: JSON.stringify({
         model: resolveScriptModel(), max_tokens: 1500,
-        thinking: { type: 'disabled' },
+        thinking: { type: 'between_tools' },
         messages: [{ role: 'user', content:
           `You are an expert analyst of AI and financial services trends. The user runs a daily podcast called "AI Finance Briefing" hosted by Neo, with ${episodeHistory.length} episodes in the archive.\n\nEPISODE SCRIPTS:\n${corpus}\n\nUSER QUESTION: ${query}\n\nProvide a thoughtful, structured analysis. Reference specific episodes and dates where relevant.`
         }]
